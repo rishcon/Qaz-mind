@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Builds and coverage
+dist/
+build/
+coverage/
+
+# Secrets and local env (only the .example files are committed)
+.env
+.env.*
+!.env.example
+!backend/.env.example
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+backend/.venv/
+backend/*.egg-info/
+
+# OS and editor
+.DS_Store
+Thumbs.db
+*.log
+
+# AI Studio local artifacts (temporary media, not project source)
+.aistudio/

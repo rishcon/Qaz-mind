@@ -1,0 +1,6 @@
+{
+  "name": "QAZMIND — Платформа осознанной подготовки к ЕНТ",
+  "description": "Оригинальная образовательная платформа подготовки к ЕНТ и ҰБТ в Казахстане. Швейцарский редакционный дизайн, аутентичные задания и симулятор экзамена.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

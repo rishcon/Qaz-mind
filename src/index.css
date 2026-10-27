@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-body: 'Golos Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --color-paper: #F5F3EE;
+  --color-paper-secondary: #EAE7DF;
+  --color-charcoal: #171717;
+  --color-signal: #FF5A36;
+  --color-border-subtle: #D9D5CB;
+  --color-border-dark: #2A2A2A;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-paper);
+  color: var(--color-charcoal);
+  overflow-x: hidden;
+}
+
+h1, h2, h3, h4, .font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* Custom scrollbar for desktop learning view */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #EAE7DF;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #C4BFB3;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #A6A092;
+}
+
+/* Hairline rule */
+.hairline-b {
+  border-bottom: 1px solid #D9D5CB;
+}
+
+.hairline-t {
+  border-top: 1px solid #D9D5CB;
+}
+
+.hairline-r {
+  border-right: 1px solid #D9D5CB;
+}
+
+.hairline-l {
+  border-left: 1px solid #D9D5CB;
+}
