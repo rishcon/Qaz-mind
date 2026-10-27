@@ -61,7 +61,7 @@ export const TeachersPage: React.FC<TeachersPageProps> = ({ onNavigate }) => {
       sortable: true,
       cell: (t) => (
         <span className="text-xs font-semibold text-[#171717]">
-          {t.createdAssignmentsCount || 0}
+          {t.createdAssignmentsCount ?? '—'}
         </span>
       ),
     },

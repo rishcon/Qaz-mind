@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ActionResultNotice, failureResult, type ActionResult } from '../ui/ConnectionNotice';
 import {
   Save,
   Eye,
@@ -14,7 +15,6 @@ import {
   Check,
 } from 'lucide-react';
 import { QuestionItem, QuestionType, QuestionOption, MatchingPair } from '../../types';
-import { mockDb } from '../../repositories/mockDatabase';
 import { adminService } from '../../services/adminService';
 import { validateQuestionDraft } from '../../utils/entRules';
 import { StatusBadge } from '../ui/StatusBadge';
@@ -32,12 +32,12 @@ export const QuestionEditor: React.FC<QuestionEditorProps> = ({
 }) => {
   const isEditing = !!initialQuestion;
 
-  const subjects = mockDb.subjects;
-  const [subjectId, setSubjectId] = useState(initialQuestion?.subjectId || subjects[0]?.id || 'history_kz');
+  const subjects = adminService.getSubjects();
+  const [subjectId, setSubjectId] = useState(initialQuestion?.subjectId || subjects[0]?.id || '');
 
-  const topics = mockDb.topics.filter((t) => t.subjectId === subjectId);
+  const topics = adminService.getTopics(subjectId);
   const [topicId, setTopicId] = useState(initialQuestion?.topicId || topics[0]?.id || '');
-  const [sectionName, setSectionName] = useState(initialQuestion?.sectionName || 'Казахское ханство');
+  const [sectionName, setSectionName] = useState(initialQuestion?.sectionName || '');
   const [type, setType] = useState<QuestionType>(initialQuestion?.type || 'single_choice');
   const [language, setLanguage] = useState<'ru' | 'kz' | 'both'>(initialQuestion?.language || 'both');
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>(initialQuestion?.difficulty || 'medium');
@@ -76,17 +76,17 @@ export const QuestionEditor: React.FC<QuestionEditorProps> = ({
   // Pedagogical Explanation
   const [explanationRu, setExplanationRu] = useState(initialQuestion?.explanationRu || '');
   const [explanationKz, setExplanationKz] = useState(initialQuestion?.explanationKz || '');
-  const [sourceReference, setSourceReference] = useState(initialQuestion?.sourceReference || 'Учебник МОН РК / ЕНТ 2026');
-  const [tagsInput, setTagsInput] = useState((initialQuestion?.tags || ['ЕНТ', 'Подготовка']).join(', '));
+  const [sourceReference, setSourceReference] = useState(initialQuestion?.sourceReference || '');
+  const [tagsInput, setTagsInput] = useState((initialQuestion?.tags || []).join(', '));
 
   // Preview & Validation State
   const [previewOpen, setPreviewOpen] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
-  const [savedToast, setSavedToast] = useState(false);
+  const [result, setResult] = useState<ActionResult | null>(null);
 
   const handleSubjectChange = (newSubId: string) => {
     setSubjectId(newSubId);
-    const subTopics = mockDb.topics.filter((t) => t.subjectId === newSubId);
+    const subTopics = adminService.getTopics(newSubId);
     if (subTopics.length > 0) {
       setTopicId(subTopics[0].id);
       setSectionName(subTopics[0].sectionTitle);
@@ -134,7 +134,7 @@ export const QuestionEditor: React.FC<QuestionEditorProps> = ({
       id: initialQuestion?.id || `qst-${Date.now().toString(36)}`,
       subjectId,
       sectionName,
-      topicId: topicId || (topics[0]?.id ?? 'default-topic'),
+      topicId,
       type,
       language,
       difficulty,
@@ -153,44 +153,38 @@ export const QuestionEditor: React.FC<QuestionEditorProps> = ({
       explanationKz,
       sourceReference,
       tags,
-      author: initialQuestion?.author || mockDb.currentAdminName,
+      author: initialQuestion?.author || (adminService.getCurrentAdmin().name ?? ''),
       version: (initialQuestion?.version || 0) + 1,
       createdAt: initialQuestion?.createdAt || new Date().toISOString(),
       lastModifiedAt: new Date().toISOString(),
     };
   };
 
+  // One save is one call to adminService. A refusal stays on the form, so the typed text is kept.
+  const saveQuestion = (status: QuestionItem['status']) => {
+    const q = buildCurrentQuestion(status);
+    try {
+      adminService.saveQuestion(q);
+      onSave(q);
+    } catch (error) {
+      setResult(failureResult(error));
+    }
+  };
+
   const handleSaveDraft = () => {
-    const q = buildCurrentQuestion('draft');
-    adminService.saveQuestion(q);
     setValidationErrors([]);
-    setSavedToast(true);
-    setTimeout(() => setSavedToast(false), 2500);
-    onSave(q);
+    saveQuestion('draft');
   };
 
+  // Review is the only way forward: publication comes after approval, so there is no direct publish here.
   const handleSubmitForReview = () => {
-    const q = buildCurrentQuestion('in_review');
-    const errors = validateQuestionDraft(q);
+    const errors = validateQuestionDraft(buildCurrentQuestion('in_review'));
     if (errors.length > 0) {
       setValidationErrors(errors);
       return;
     }
     setValidationErrors([]);
-    adminService.saveQuestion(q);
-    onSave(q);
-  };
-
-  const handlePublishDirectly = () => {
-    const q = buildCurrentQuestion('published');
-    const errors = validateQuestionDraft(q);
-    if (errors.length > 0) {
-      setValidationErrors(errors);
-      return;
-    }
-    setValidationErrors([]);
-    adminService.saveQuestion(q);
-    onSave(q);
+    saveQuestion('in_review');
   };
 
   return (
@@ -219,12 +213,6 @@ export const QuestionEditor: React.FC<QuestionEditorProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {savedToast && (
-            <span className="text-xs text-[#258568] flex items-center gap-1 font-medium animate-in fade-in">
-              <Check className="w-3.5 h-3.5" /> Сохранено в черновики
-            </span>
-          )}
-
           <button
             type="button"
             onClick={() => setPreviewOpen(true)}
@@ -248,16 +236,10 @@ export const QuestionEditor: React.FC<QuestionEditorProps> = ({
           >
             <Send className="w-3.5 h-3.5" /> На рецензию
           </button>
-
-          <button
-            type="button"
-            onClick={handlePublishDirectly}
-            className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#FF5A36] hover:bg-[#E84D2B] rounded-md flex items-center gap-1.5 cursor-pointer shadow-xs"
-          >
-            <CheckCircle2 className="w-3.5 h-3.5" /> Опубликовать
-          </button>
         </div>
       </div>
+
+      <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
 
       {/* Validation alert if errors */}
       {validationErrors.length > 0 && (
@@ -401,7 +383,7 @@ export const QuestionEditor: React.FC<QuestionEditorProps> = ({
                 type="text"
                 value={sourceReference}
                 onChange={(e) => setSourceReference(e.target.value)}
-                placeholder="Например: История Казахстана 8 класс, Мектеп 2021"
+                placeholder="Название учебника и класс"
                 className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#E2DED5] rounded-md text-[#171717]"
               />
             </div>
@@ -412,7 +394,7 @@ export const QuestionEditor: React.FC<QuestionEditorProps> = ({
                 type="text"
                 value={tagsInput}
                 onChange={(e) => setTagsInput(e.target.value)}
-                placeholder="ЕНТ, 2026, Ханство, Керей"
+                placeholder="Теги через запятую"
                 className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#E2DED5] rounded-md text-[#171717]"
               />
             </div>
@@ -622,7 +604,7 @@ export const QuestionEditor: React.FC<QuestionEditorProps> = ({
                             matchingPairs.map((p) => (p.id === pair.id ? { ...p, leftRu: val } : p))
                           );
                         }}
-                        placeholder="Например: Тюргешский каганат"
+                        placeholder="Левая часть пары"
                         className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#E2DED5] rounded-md"
                       />
                     </div>
@@ -640,7 +622,7 @@ export const QuestionEditor: React.FC<QuestionEditorProps> = ({
                               matchingPairs.map((p) => (p.id === pair.id ? { ...p, rightRu: val } : p))
                             );
                           }}
-                          placeholder="Например: Суяб"
+                          placeholder="Правая часть пары"
                           className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#E2DED5] rounded-md"
                         />
                       </div>
@@ -675,7 +657,7 @@ export const QuestionEditor: React.FC<QuestionEditorProps> = ({
                     type="number"
                     value={numericalAnswer ?? ''}
                     onChange={(e) => setNumericalAnswer(e.target.value === '' ? undefined : Number(e.target.value))}
-                    placeholder="Например: 4320"
+                    placeholder="Числовой ответ"
                     className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#E2DED5] rounded-md text-[#171717]"
                   />
                 </div>

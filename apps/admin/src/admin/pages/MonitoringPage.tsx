@@ -1,8 +1,9 @@
 import React from 'react';
 import { Cpu, Database, Server, RefreshCw, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
-import { adminService } from '../services/adminService';
+import { adminService, ADMIN_API_CONNECTED } from '../services/adminService';
 import { StatusBadge } from '../components/ui/StatusBadge';
-import { DemoBadge } from '../components/ui/DemoBadge';
+
+const NOT_LOADED = 'Данные не загружены: сервер администрирования не подключён.';
 
 export const MonitoringPage: React.FC = () => {
   const services = adminService.getSystemServices();
@@ -13,28 +14,23 @@ export const MonitoringPage: React.FC = () => {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-[#E2DED5]">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-xl font-bold text-[#171717]">Системный мониторинг и службы</h1>
-            <DemoBadge />
-          </div>
+          <h1 className="text-xl font-bold text-[#171717]">Системный мониторинг и службы</h1>
           <p className="text-xs text-[#78716C] mt-0.5">
             Техническое состояние инфраструктуры, фоновые воркеры и статус соединений базы данных.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-[#258568] flex items-center gap-1.5 font-medium">
-            <span className="w-2 h-2 rounded-full bg-[#258568] animate-pulse" />
-            Все системы в норме
+          <span className="text-[11px] text-[#78716C] flex items-center gap-1.5 font-medium">
+            <span className="w-2 h-2 rounded-full bg-[#A8A29E]" />
+            {ADMIN_API_CONNECTED ? 'Состояние загружено' : 'Состояние неизвестно'}
           </span>
         </div>
       </div>
 
       <div className="p-3.5 bg-[#FEF7EA] border border-[#D89B35]/30 rounded-xl text-xs text-[#9A6715] flex items-center gap-2">
         <AlertTriangle className="w-4 h-4 shrink-0" />
-        <span>
-          Интерфейс подготовлен для приема телеметрии с production-серверов FastAPI и очередей Celery / Redis.
-        </span>
+        <span>Телеметрия серверов и очередей не подключена. Здесь отображаются только реально полученные данные.</span>
       </div>
 
       {/* Services Health Cards */}
@@ -43,6 +39,7 @@ export const MonitoringPage: React.FC = () => {
           Инфраструктурные сервисы платформы
         </h2>
 
+        {services.length === 0 && <p className="text-xs text-[#78716C]">{NOT_LOADED}</p>}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
           {services.map((srv) => (
             <div
@@ -77,6 +74,7 @@ export const MonitoringPage: React.FC = () => {
           Фоновые задачи и регулярные воркеры
         </h2>
 
+        {backgroundJobs.length === 0 && <p className="text-xs text-[#78716C]">{NOT_LOADED}</p>}
         <div className="divide-y divide-[#E2DED5] text-xs">
           {backgroundJobs.map((job) => (
             <div key={job.id} className="py-3 flex flex-wrap items-center justify-between gap-3">

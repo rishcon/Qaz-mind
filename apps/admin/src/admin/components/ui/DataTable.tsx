@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Filter,
 } from 'lucide-react';
+import { ADMIN_API_CONNECTED } from '../../services/adminService';
 
 export interface ColumnDef<T> {
   key: string;
@@ -242,8 +243,17 @@ export function DataTable<T extends Record<string, any>>({
                   colSpan={columns.length + (selectable ? 1 : 0)}
                   className="py-12 text-center text-[#78716C]"
                 >
-                  <p className="font-medium text-sm text-[#171717]">{emptyMessage}</p>
-                  <p className="text-xs text-[#A8A29E] mt-1">{emptySubtitle}</p>
+                  {ADMIN_API_CONNECTED ? (
+                    <>
+                      <p className="font-medium text-sm text-[#171717]">{emptyMessage}</p>
+                      <p className="text-xs text-[#A8A29E] mt-1">{emptySubtitle}</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-medium text-sm text-[#171717]">Данные не загружены</p>
+                      <p className="text-xs text-[#A8A29E] mt-1">Сервер администрирования не подключён.</p>
+                    </>
+                  )}
                 </td>
               </tr>
             ) : (

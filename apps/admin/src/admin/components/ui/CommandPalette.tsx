@@ -11,7 +11,7 @@ import {
   X,
   ArrowRight,
 } from 'lucide-react';
-import { mockDb } from '../../repositories/mockDatabase';
+import { adminService, ADMIN_API_CONNECTED } from '../../services/adminService';
 
 interface SearchItem {
   id: string;
@@ -60,12 +60,12 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
 
   const q = query.trim().toLowerCase();
 
-  // Search local database
+  // Search the administrative data. Until the server is connected, there is nothing to search.
   const results: SearchItem[] = [];
 
   if (q.length > 0) {
     // Users
-    mockDb.users.forEach((u) => {
+    adminService.getUsers().forEach((u) => {
       if (
         u.name.toLowerCase().includes(q) ||
         u.email.toLowerCase().includes(q) ||
@@ -82,7 +82,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
     });
 
     // Schools
-    mockDb.schools.forEach((s) => {
+    adminService.getSchools().forEach((s) => {
       if (s.name.toLowerCase().includes(q) || s.city.toLowerCase().includes(q)) {
         results.push({
           id: s.id,
@@ -95,7 +95,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
     });
 
     // Subjects
-    mockDb.subjects.forEach((sub) => {
+    adminService.getSubjects().forEach((sub) => {
       if (sub.nameRu.toLowerCase().includes(q) || sub.nameKz.toLowerCase().includes(q) || sub.code.toLowerCase().includes(q)) {
         results.push({
           id: sub.id,
@@ -108,7 +108,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
     });
 
     // Questions
-    mockDb.questions.forEach((qst) => {
+    adminService.getQuestions().forEach((qst) => {
       if (qst.textRu.toLowerCase().includes(q) || qst.id.toLowerCase().includes(q) || qst.tags.some((t) => t.toLowerCase().includes(q))) {
         results.push({
           id: qst.id,
@@ -121,7 +121,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
     });
 
     // Exams
-    mockDb.exams.forEach((ex) => {
+    adminService.getExams().forEach((ex) => {
       if (ex.titleRu.toLowerCase().includes(q) || ex.titleKz.toLowerCase().includes(q)) {
         results.push({
           id: ex.id,
@@ -182,18 +182,17 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
               <p className="mt-1 text-[#A8A29E]">
                 Введите фамилию ученика, название школы, предмет ЕНТ или фрагмент вопроса
               </p>
-              <div className="mt-4 flex items-center justify-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-[#F0EEE8] font-mono text-[10px] text-[#5C574F]">
-                  Например: Кенесары
-                </span>
-                <span className="px-2 py-0.5 rounded bg-[#F0EEE8] font-mono text-[10px] text-[#5C574F]">
-                  или: Астана
-                </span>
-              </div>
+              {!ADMIN_API_CONNECTED && (
+                <p className="mt-3 text-[#A8A29E]">Поиск заработает после подключения сервера администрирования.</p>
+              )}
             </div>
           ) : results.length === 0 ? (
             <div className="py-10 text-center text-xs text-[#78716C]">
-              По запросу «<span className="font-semibold text-[#171717]">{query}</span>» ничего не найдено.
+              {ADMIN_API_CONNECTED ? (
+                <>По запросу «<span className="font-semibold text-[#171717]">{query}</span>» ничего не найдено.</>
+              ) : (
+                <>Поиск по «<span className="font-semibold text-[#171717]">{query}</span>» недоступен: сервер администрирования не подключён.</>
+              )}
             </div>
           ) : (
             <div className="space-y-1">

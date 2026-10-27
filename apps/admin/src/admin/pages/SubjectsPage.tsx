@@ -13,14 +13,14 @@ import {
 import { SubjectItem, TopicItem } from '../types';
 import { adminService } from '../services/adminService';
 import { StatusBadge } from '../components/ui/StatusBadge';
-import { mockDb } from '../repositories/mockDatabase';
+import { ActionResultNotice, failureResult, type ActionResult } from '../components/ui/ConnectionNotice';
 
 interface SubjectsPageProps {
   onNavigate: (path: string) => void;
 }
 
 export const SubjectsPage: React.FC<SubjectsPageProps> = ({ onNavigate }) => {
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string>('history_kz');
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
   const [createSubjectOpen, setCreateSubjectOpen] = useState(false);
   const [newSubNameRu, setNewSubNameRu] = useState('');
   const [newSubNameKz, setNewSubNameKz] = useState('');
@@ -32,42 +32,52 @@ export const SubjectsPage: React.FC<SubjectsPageProps> = ({ onNavigate }) => {
   const [newTopicTitleRu, setNewTopicTitleRu] = useState('');
   const [newTopicTitleKz, setNewTopicTitleKz] = useState('');
   const [newTopicSection, setNewTopicSection] = useState('Общий раздел');
+  const [result, setResult] = useState<ActionResult | null>(null);
 
   const subjects = adminService.getSubjects();
   const activeSubject = subjects.find((s) => s.id === selectedSubjectId) || subjects[0];
   const topics = adminService.getTopics(activeSubject?.id);
 
+  // A refused create keeps the form open with the typed values, so nothing has to be typed again.
   const handleCreateSubject = () => {
-    if (!newSubNameRu || !newSubCode) return;
-    adminService.createSubject({
-      id: newSubCode.toLowerCase().replace(/_/g, '-'),
-      code: newSubCode.toUpperCase(),
-      nameRu: newSubNameRu,
-      nameKz: newSubNameKz || newSubNameRu,
-      description: `Учебный предмет ЕНТ: ${newSubNameRu}`,
-      type: newSubType,
-      status: 'active',
-      color: '#FF5A36',
-    });
-    setCreateSubjectOpen(false);
-    setNewSubNameRu('');
-    setNewSubNameKz('');
-    setNewSubCode('');
+    if (!newSubNameRu.trim() || !newSubCode.trim()) return;
+    try {
+      adminService.createSubject({
+        id: newSubCode.trim().toLowerCase().replace(/_/g, '-'),
+        code: newSubCode.trim().toUpperCase(),
+        nameRu: newSubNameRu.trim(),
+        nameKz: newSubNameKz.trim() || newSubNameRu.trim(),
+        description: `Учебный предмет ЕНТ: ${newSubNameRu.trim()}`,
+        type: newSubType,
+        status: 'active',
+        color: '#FF5A36',
+      });
+      setCreateSubjectOpen(false);
+      setNewSubNameRu('');
+      setNewSubNameKz('');
+      setNewSubCode('');
+    } catch (error) {
+      setResult(failureResult(error));
+    }
   };
 
   const handleCreateTopic = () => {
-    if (!newTopicTitleRu || !activeSubject) return;
-    adminService.createTopic({
-      subjectId: activeSubject.id,
-      sectionTitle: newTopicSection,
-      titleRu: newTopicTitleRu,
-      titleKz: newTopicTitleKz || newTopicTitleRu,
-      order: topics.length + 1,
-      status: 'published',
-    });
-    setCreateTopicOpen(false);
-    setNewTopicTitleRu('');
-    setNewTopicTitleKz('');
+    if (!newTopicTitleRu.trim() || !activeSubject) return;
+    try {
+      adminService.createTopic({
+        subjectId: activeSubject.id,
+        sectionTitle: newTopicSection.trim(),
+        titleRu: newTopicTitleRu.trim(),
+        titleKz: newTopicTitleKz.trim() || newTopicTitleRu.trim(),
+        order: topics.length + 1,
+        status: 'published',
+      });
+      setCreateTopicOpen(false);
+      setNewTopicTitleRu('');
+      setNewTopicTitleKz('');
+    } catch (error) {
+      setResult(failureResult(error));
+    }
   };
 
   return (
@@ -88,6 +98,10 @@ export const SubjectsPage: React.FC<SubjectsPageProps> = ({ onNavigate }) => {
           <Plus className="w-4 h-4" /> Добавить предмет
         </button>
       </div>
+
+      {!createSubjectOpen && !createTopicOpen && (
+        <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
+      )}
 
       {/* Grid: Left Subjects List + Right Topic Hierarchy */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -229,13 +243,14 @@ export const SubjectsPage: React.FC<SubjectsPageProps> = ({ onNavigate }) => {
               </button>
             </div>
             <div className="p-4 space-y-3">
+              <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
               <div>
                 <label className="text-xs font-medium text-[#78716C] block mb-1">Код предмета (ENG)</label>
                 <input
                   type="text"
                   value={newSubCode}
                   onChange={(e) => setNewSubCode(e.target.value)}
-                  placeholder="Например: CS или LAW"
+                  placeholder="Код предмета"
                   className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#E2DED5] rounded-md font-mono"
                 />
               </div>
@@ -245,7 +260,7 @@ export const SubjectsPage: React.FC<SubjectsPageProps> = ({ onNavigate }) => {
                   type="text"
                   value={newSubNameRu}
                   onChange={(e) => setNewSubNameRu(e.target.value)}
-                  placeholder="Например: Правоведение"
+                  placeholder="Название предмета"
                   className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#E2DED5] rounded-md font-medium"
                 />
               </div>
@@ -255,7 +270,7 @@ export const SubjectsPage: React.FC<SubjectsPageProps> = ({ onNavigate }) => {
                   type="text"
                   value={newSubNameKz}
                   onChange={(e) => setNewSubNameKz(e.target.value)}
-                  placeholder="Құқықтану"
+                  placeholder="Атауы"
                   className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#E2DED5] rounded-md font-medium"
                 />
               </div>
@@ -304,13 +319,14 @@ export const SubjectsPage: React.FC<SubjectsPageProps> = ({ onNavigate }) => {
               </button>
             </div>
             <div className="p-4 space-y-3">
+              <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
               <div>
                 <label className="text-xs font-medium text-[#78716C] block mb-1">Раздел курса</label>
                 <input
                   type="text"
                   value={newTopicSection}
                   onChange={(e) => setNewTopicSection(e.target.value)}
-                  placeholder="Например: Казахское ханство"
+                  placeholder="Название раздела"
                   className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#E2DED5] rounded-md"
                 />
               </div>
@@ -320,7 +336,7 @@ export const SubjectsPage: React.FC<SubjectsPageProps> = ({ onNavigate }) => {
                   type="text"
                   value={newTopicTitleRu}
                   onChange={(e) => setNewTopicTitleRu(e.target.value)}
-                  placeholder="Например: Реформы Тауке хана и свод «Жеты Жаргы»"
+                  placeholder="Название темы"
                   className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#E2DED5] rounded-md font-medium"
                 />
               </div>
@@ -330,7 +346,7 @@ export const SubjectsPage: React.FC<SubjectsPageProps> = ({ onNavigate }) => {
                   type="text"
                   value={newTopicTitleKz}
                   onChange={(e) => setNewTopicTitleKz(e.target.value)}
-                  placeholder="Тәуке ханның реформалары..."
+                  placeholder="Тақырыбы"
                   className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#E2DED5] rounded-md font-medium"
                 />
               </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -22,20 +22,14 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  LogOut,
-  ExternalLink,
-  ChevronDown,
 } from 'lucide-react';
-import { RoleType } from '../../types';
-import { mockDb } from '../../repositories/mockDatabase';
+import { adminService } from '../../services/adminService';
 
 interface AdminSidebarProps {
   currentPath: string;
   onNavigate: (path: string) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
-  onOpenRoleSwitcher?: () => void;
-  onSwitchWorkspace?: (workspace: 'student' | 'teacher' | 'school' | 'landing') => void;
 }
 
 interface NavGroup {
@@ -44,27 +38,15 @@ interface NavGroup {
     title: string;
     path: string;
     icon: React.ComponentType<{ className?: string }>;
-    badge?: number;
+    badge?: number | null;
     requiredPermission?: string;
   }>;
 }
 
-export const AdminSidebar: React.FC<AdminSidebarProps> = ({
-  currentPath,
-  onNavigate,
-  collapsed,
-  onToggleCollapse,
-  onOpenRoleSwitcher,
-  onSwitchWorkspace,
-}) => {
-  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
-
-  // Compute live unread / pending badge counts
-  const pendingSchools = mockDb.schools.filter((s) => s.approvalStatus === 'pending_verification').length;
-  const inReviewQuestions = mockDb.questions.filter((q) => q.status === 'in_review').length;
-  const pendingReports = mockDb.contentReports.filter((r) => r.status === 'pending').length;
-  const openTickets = mockDb.supportTickets.filter((t) => t.status === 'new').length;
-  const unreadNotifs = mockDb.notifications.filter((n) => !n.isRead).length;
+export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPath, onNavigate, collapsed, onToggleCollapse }) => {
+  // Badges come from the server. A null counter means "not loaded", so no badge is drawn for it.
+  const counters = adminService.getCounters();
+  const badge = (value: number | null) => (value !== null && value > 0 ? value : undefined);
 
   const navGroups: NavGroup[] = [
     {
@@ -76,7 +58,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           title: 'Школы',
           path: '/admin/schools',
           icon: Building2,
-          badge: pendingSchools > 0 ? pendingSchools : undefined,
+          badge: badge(counters.pendingSchools),
         },
         { title: 'Учителя', path: '/admin/teachers', icon: GraduationCap },
       ],
@@ -91,7 +73,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           title: 'Модерация',
           path: '/admin/content/review',
           icon: FileCheck2,
-          badge: inReviewQuestions > 0 ? inReviewQuestions : undefined,
+          badge: badge(counters.inReviewQuestions),
         },
         { title: 'Экзамены', path: '/admin/exams', icon: Award },
         { title: 'Задания', path: '/admin/assignments', icon: CalendarCheck },
@@ -113,20 +95,20 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           title: 'Обращения',
           path: '/admin/support',
           icon: MessageSquare,
-          badge: openTickets > 0 ? openTickets : undefined,
+          badge: badge(counters.openTickets),
         },
         {
           title: 'Жалобы',
           path: '/admin/reports',
           icon: AlertOctagon,
-          badge: pendingReports > 0 ? pendingReports : undefined,
+          badge: badge(counters.pendingReports),
         },
         { title: 'Мониторинг', path: '/admin/monitoring', icon: Cpu },
         {
           title: 'Уведомления',
           path: '/admin/notifications',
           icon: Bell,
-          badge: unreadNotifs > 0 ? unreadNotifs : undefined,
+          badge: badge(counters.unreadNotifications),
         },
       ],
     },
@@ -138,16 +120,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       ],
     },
   ];
-
-  const roleNameMap: Record<RoleType, string> = {
-    OWNER: 'Владелец платформы',
-    PLATFORM_ADMIN: 'Администратор',
-    CONTENT_MANAGER: 'Контент-менеджер',
-    CONTENT_REVIEWER: 'Рецензент ЕНТ',
-    SUPPORT_AGENT: 'Служба поддержки',
-    FINANCE_MANAGER: 'Финансовый менеджер',
-    ANALYST: 'Аналитик данных',
-  };
 
   return (
     <aside
@@ -233,93 +205,18 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         ))}
       </div>
 
-      {/* Bottom Profile & Role Bar */}
+      {/* Current administrator. Sign-in is not implemented yet, so no identity is shown. */}
       <div className="border-t border-[#E2DED5] p-3 bg-[#FCFBF9] shrink-0">
         {!collapsed ? (
-          <div>
-            <div
-              onClick={onOpenRoleSwitcher}
-              className="p-2 rounded-lg bg-white border border-[#E2DED5] hover:border-[#FF5A36]/40 transition-all cursor-pointer group"
-              title="Нажмите, чтобы переключить роль для тестирования доступа"
-            >
-              <div className="flex items-center justify-between">
-                <div className="truncate">
-                  <p className="text-xs font-semibold text-[#171717] truncate">{mockDb.currentAdminName}</p>
-                  <p className="text-[10px] text-[#258568] font-medium truncate flex items-center gap-1 mt-0.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#258568]" />
-                    {roleNameMap[mockDb.currentAdminRole]}
-                  </p>
-                </div>
-                <span className="text-[10px] text-[#A8A29E] group-hover:text-[#FF5A36] font-mono">
-                  Сменить
-                </span>
-              </div>
-            </div>
-
-            {/* Platform Ecosystem Quick Switch */}
-            <div className="relative mt-2">
-              <button
-                onClick={() => setWorkspaceMenuOpen(!workspaceMenuOpen)}
-                className="w-full flex items-center justify-between px-2.5 py-1.5 rounded text-[11px] text-[#78716C] bg-[#F5F3EE] hover:bg-[#EBE8E0] transition-colors cursor-pointer"
-              >
-                <span className="flex items-center gap-1.5 truncate">
-                  <ExternalLink className="w-3 h-3 text-[#A8A29E]" />
-                  <span>Перейти в кабинет...</span>
-                </span>
-                <ChevronDown className="w-3 h-3 text-[#A8A29E]" />
-              </button>
-
-              {workspaceMenuOpen && (
-                <div className="absolute bottom-full left-0 right-0 mb-1 bg-white rounded-lg shadow-lg border border-[#E2DED5] p-1 text-xs space-y-0.5 z-50 animate-in fade-in">
-                  <button
-                    onClick={() => {
-                      setWorkspaceMenuOpen(false);
-                      onSwitchWorkspace && onSwitchWorkspace('student');
-                    }}
-                    className="w-full text-left px-2.5 py-1.5 rounded hover:bg-[#F5F3EE] text-[#171717] cursor-pointer"
-                  >
-                    🎓 Кабинет ученика ЕНТ
-                  </button>
-                  <button
-                    onClick={() => {
-                      setWorkspaceMenuOpen(false);
-                      onSwitchWorkspace && onSwitchWorkspace('teacher');
-                    }}
-                    className="w-full text-left px-2.5 py-1.5 rounded hover:bg-[#F5F3EE] text-[#171717] cursor-pointer"
-                  >
-                    👩‍🏫 Кабинет преподавателя
-                  </button>
-                  <button
-                    onClick={() => {
-                      setWorkspaceMenuOpen(false);
-                      onSwitchWorkspace && onSwitchWorkspace('school');
-                    }}
-                    className="w-full text-left px-2.5 py-1.5 rounded hover:bg-[#F5F3EE] text-[#171717] cursor-pointer"
-                  >
-                    🏫 Управление школой
-                  </button>
-                  <button
-                    onClick={() => {
-                      setWorkspaceMenuOpen(false);
-                      onSwitchWorkspace && onSwitchWorkspace('landing');
-                    }}
-                    className="w-full text-left px-2.5 py-1.5 rounded hover:bg-[#F5F3EE] text-[#171717] cursor-pointer"
-                  >
-                    🌐 Главная страница QazMind
-                  </button>
-                </div>
-              )}
-            </div>
+          <div className="p-2 rounded-lg bg-white border border-[#E2DED5]">
+            <p className="text-xs font-semibold text-[#171717]">Вход не выполнен</p>
+            <p className="text-[10px] text-[#78716C] mt-0.5">Вход администраторов не подключён</p>
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-2">
-            <button
-              onClick={onOpenRoleSwitcher}
-              className="w-8 h-8 rounded-full bg-[#F0EEE8] flex items-center justify-center text-xs font-bold text-[#FF5A36] border border-[#E2DED5] cursor-pointer"
-              title={`${mockDb.currentAdminName} (${mockDb.currentAdminRole})`}
-            >
-              АС
-            </button>
+          <div className="flex justify-center">
+            <span className="w-8 h-8 rounded-full bg-[#F0EEE8] flex items-center justify-center text-[10px] font-bold text-[#78716C] border border-[#E2DED5]" title="Вход не выполнен">
+              —
+            </span>
           </div>
         )}
       </div>

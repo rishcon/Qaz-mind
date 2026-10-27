@@ -1,7 +1,7 @@
-import React from 'react';
-import { Bell, CheckCircle2, ArrowRight, Check } from 'lucide-react';
-import { adminService } from '../services/adminService';
-import { mockDb } from '../repositories/mockDatabase';
+import React, { useState } from 'react';
+import { ArrowRight, Check } from 'lucide-react';
+import { adminService, ADMIN_API_CONNECTED } from '../services/adminService';
+import { ActionResultNotice, failureResult, type ActionResult } from '../components/ui/ConnectionNotice';
 
 interface NotificationsPageProps {
   onNavigate: (path: string) => void;
@@ -9,10 +9,16 @@ interface NotificationsPageProps {
 
 export const NotificationsPage: React.FC<NotificationsPageProps> = ({ onNavigate }) => {
   const notifications = adminService.getNotifications();
+  const [result, setResult] = useState<ActionResult | null>(null);
 
+  // Nothing is marked locally: the state changes only when the server accepts the change.
   const handleMarkAllRead = () => {
-    mockDb.notifications.forEach((n) => (n.isRead = true));
-    mockDb.notify();
+    try {
+      adminService.markAllNotificationsRead();
+      setResult({ tone: 'success', text: 'Все уведомления отмечены прочитанными.' });
+    } catch (error) {
+      setResult(failureResult(error));
+    }
   };
 
   return (
@@ -33,14 +39,18 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({ onNavigate
         </button>
       </div>
 
+      <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
+
       <div className="bg-white rounded-xl border border-[#E2DED5] divide-y divide-[#E2DED5] overflow-hidden shadow-xs">
+        {notifications.length === 0 && (
+          <p className="p-6 text-xs text-[#78716C]">
+            {ADMIN_API_CONNECTED ? 'Уведомлений нет.' : 'Данные не загружены: сервер администрирования не подключён.'}
+          </p>
+        )}
         {notifications.map((n) => (
           <div
             key={n.id}
-            onClick={() => {
-              adminService.markNotificationAsRead(n.id);
-              onNavigate(n.linkUrl);
-            }}
+            onClick={() => onNavigate(n.linkUrl)}
             className={`p-4 hover:bg-[#FAF9F6] transition-colors cursor-pointer flex items-start justify-between gap-4 text-xs ${
               !n.isRead ? 'bg-[#FFF7F5]' : ''
             }`}

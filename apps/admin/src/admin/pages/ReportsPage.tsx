@@ -1,19 +1,10 @@
 import React, { useState } from 'react';
-import {
-  AlertOctagon,
-  CheckCircle2,
-  XCircle,
-  ExternalLink,
-  MessageSquare,
-  HelpCircle,
-  Check,
-  X,
-  FileQuestion,
-} from 'lucide-react';
+import { FileQuestion } from 'lucide-react';
 import { ContentReport } from '../types';
 import { adminService } from '../services/adminService';
 import { DataTable, ColumnDef, TableFilter } from '../components/ui/DataTable';
 import { StatusBadge } from '../components/ui/StatusBadge';
+import { ActionResultNotice, failureResult, type ActionResult } from '../components/ui/ConnectionNotice';
 
 interface ReportsPageProps {
   onNavigate: (path: string) => void;
@@ -22,17 +13,26 @@ interface ReportsPageProps {
 export const ReportsPage: React.FC<ReportsPageProps> = ({ onNavigate }) => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedReport, setSelectedReport] = useState<ContentReport | null>(null);
-  const [resolutionNotes, setResolutionNotes] = useState('Формулировка проверена, неточность исправлена в базе.');
-  const [resolvedToast, setResolvedToast] = useState(false);
+  // The resolution is the methodologist's own text. It is never pre-filled, because it records what was done.
+  const [resolutionNotes, setResolutionNotes] = useState('');
+  const [result, setResult] = useState<ActionResult | null>(null);
 
   const reports = adminService.getContentReports({ status: statusFilter });
 
+  // A refused resolution keeps the report open with the typed resolution.
   const handleResolve = (action: 'resolved' | 'rejected') => {
-    if (!selectedReport) return;
-    adminService.resolveReport(selectedReport.id, action, resolutionNotes);
-    setSelectedReport(null);
-    setResolvedToast(true);
-    setTimeout(() => setResolvedToast(false), 2500);
+    if (!selectedReport || !resolutionNotes.trim()) return;
+    try {
+      adminService.resolveReport(selectedReport.id, action, resolutionNotes.trim());
+      setSelectedReport(null);
+      setResolutionNotes('');
+      setResult({
+        tone: 'success',
+        text: action === 'resolved' ? 'Жалоба помечена решённой.' : 'Жалоба отклонена.',
+      });
+    } catch (error) {
+      setResult(failureResult(error));
+    }
   };
 
   const columns: ColumnDef<ContentReport>[] = [
@@ -97,6 +97,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onNavigate }) => {
     },
   ];
 
+  const filters: TableFilter[] = [];
+
   return (
     <div className="space-y-5 animate-in fade-in duration-150">
       <div className="pb-2 border-b border-[#E2DED5]">
@@ -106,18 +108,18 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onNavigate }) => {
         </p>
       </div>
 
-      {resolvedToast && (
-        <div className="p-3 bg-[#EBF7F2] border border-[#258568]/30 rounded-xl text-xs font-semibold text-[#1D6A53] flex items-center gap-2 animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4" /> Статус жалобы обновлен, событие внесено в аудит.
-        </div>
-      )}
+      <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
 
       <DataTable
         data={reports}
         columns={columns}
         keyExtractor={(r) => r.id}
         searchPlaceholder="Поиск по ID или формулировке..."
-        onRowClick={(r) => setSelectedReport(r)}
+        filters={filters}
+        onRowClick={(r) => {
+          setResult(null);
+          setSelectedReport(r);
+        }}
       />
 
       {/* Report Modal */}
@@ -163,23 +165,28 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onNavigate }) => {
                   rows={2}
                   value={resolutionNotes}
                   onChange={(e) => setResolutionNotes(e.target.value)}
+                  placeholder="Что проверено и что изменено"
                   className="w-full text-xs p-2 bg-white border border-[#E2DED5] rounded-md"
                 />
               </div>
+
+              <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
             </div>
 
             <div className="p-3 bg-[#FCFBF9] border-t border-[#E2DED5] flex items-center justify-end gap-2">
               <button
                 type="button"
+                disabled={!resolutionNotes.trim()}
                 onClick={() => handleResolve('rejected')}
-                className="px-3.5 py-1.5 text-xs text-[#C94A43] bg-white border border-[#FCA5A5] rounded hover:bg-[#FFF1F2]"
+                className="px-3.5 py-1.5 text-xs text-[#C94A43] bg-white border border-[#FCA5A5] rounded hover:bg-[#FFF1F2] disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Отклонить как необоснованную
               </button>
               <button
                 type="button"
+                disabled={!resolutionNotes.trim()}
                 onClick={() => handleResolve('resolved')}
-                className="px-4 py-1.5 text-xs font-semibold text-white bg-[#258568] hover:bg-[#1D6A53] rounded cursor-pointer shadow-xs"
+                className="px-4 py-1.5 text-xs font-semibold text-white bg-[#258568] hover:bg-[#1D6A53] rounded cursor-pointer shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Пометить решенной
               </button>

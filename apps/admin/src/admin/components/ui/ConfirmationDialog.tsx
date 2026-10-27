@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, Info, CheckCircle2, X } from 'lucide-react';
+import { AlertTriangle, Info } from 'lucide-react';
 
 interface ConfirmationDialogProps {
   isOpen: boolean;
@@ -8,9 +8,11 @@ interface ConfirmationDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   variant?: 'danger' | 'warning' | 'primary';
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
-  auditNotice?: boolean;
+  /** Optional content under the message, for example a reason field. */
+  children?: React.ReactNode;
 }
 
 export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
@@ -20,9 +22,10 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
   confirmLabel = 'Подтвердить',
   cancelLabel = 'Отмена',
   variant = 'primary',
+  confirmDisabled = false,
   onConfirm,
   onCancel,
-  auditNotice = true,
+  children,
 }) => {
   if (!isOpen) return null;
 
@@ -61,12 +64,7 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
               <h3 className="text-sm font-semibold text-[#171717]">{title}</h3>
               <p className="mt-1 text-xs text-[#78716C] leading-relaxed">{message}</p>
 
-              {auditNotice && (
-                <div className="mt-3 p-2.5 rounded-md bg-[#F7F6F2] border border-[#E2DED5] flex items-center gap-2 text-[11px] text-[#5C574F]">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-[#258568] shrink-0" />
-                  <span>Действие будет зафиксировано в журнале аудита администратора.</span>
-                </div>
-              )}
+              {children && <div className="mt-3">{children}</div>}
             </div>
           </div>
         </div>
@@ -82,7 +80,8 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
           <button
             type="button"
             onClick={onConfirm}
-            className={`px-3.5 py-1.5 text-xs font-medium rounded-md shadow-xs transition-colors cursor-pointer ${styles.btn}`}
+            disabled={confirmDisabled}
+            className={`px-3.5 py-1.5 text-xs font-medium rounded-md shadow-xs transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${styles.btn}`}
           >
             {confirmLabel}
           </button>

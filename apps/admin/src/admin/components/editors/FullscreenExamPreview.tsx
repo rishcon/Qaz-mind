@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Clock, ChevronLeft, ChevronRight, CheckCircle, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { ExamItem, QuestionItem } from '../../types';
-import { mockDb } from '../../repositories/mockDatabase';
+import { adminService } from '../../services/adminService';
 
 interface FullscreenExamPreviewProps {
   exam: ExamItem;
@@ -13,13 +13,11 @@ export const FullscreenExamPreview: React.FC<FullscreenExamPreviewProps> = ({ ex
   const [userAnswers, setUserAnswers] = useState<Record<string, any>>({});
   const [timeLeft, setTimeLeft] = useState(exam.durationMinutes * 60);
 
-  // Retrieve actual questions from database
-  const questions: QuestionItem[] = exam.questionIds
-    .map((id) => mockDb.questions.find((q) => q.id === id))
-    .filter(Boolean) as QuestionItem[];
-
-  // Fallback if exam had fewer questions in mock:
-  const displayQuestions = questions.length > 0 ? questions : mockDb.questions.slice(0, 5);
+  // The exam's questions, in its order. Nothing is substituted when some of them are not loaded.
+  const bank = adminService.getQuestions();
+  const displayQuestions: QuestionItem[] = exam.questionIds
+    .map((id) => bank.find((q) => q.id === id))
+    .filter((q): q is QuestionItem => q !== undefined);
 
   const currentQ = displayQuestions[currentIdx];
 
@@ -40,6 +38,20 @@ export const FullscreenExamPreview: React.FC<FullscreenExamPreviewProps> = ({ ex
   const handleSelectOption = (qId: string, optId: string) => {
     setUserAnswers({ ...userAnswers, [qId]: optId });
   };
+
+
+  if (displayQuestions.length === 0) {
+    return (
+      <div className="fixed inset-0 z-[80] bg-[#F5F3EE] flex items-center justify-center p-6">
+        <div className="max-w-md bg-white border border-[#E2DED5] rounded-xl p-8 text-center text-xs text-[#78716C] space-y-4">
+          <p>В варианте нет загруженных вопросов. Предпросмотр не показывает вопросы, которых нет в банке.</p>
+          <button onClick={onClose} className="px-4 py-2 rounded-md bg-[#171717] text-white text-xs font-semibold cursor-pointer">
+            Закрыть
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 bg-[#F5F3EE] flex flex-col select-none overflow-hidden animate-in fade-in">

@@ -1,21 +1,8 @@
 import React, { useState } from 'react';
-import {
-  ArrowLeft,
-  Building2,
-  Users,
-  GraduationCap,
-  CalendarCheck,
-  CreditCard,
-  CheckCircle2,
-  Mail,
-  Phone,
-  Shield,
-  Edit3,
-  Check,
-} from 'lucide-react';
-import { adminService } from '../services/adminService';
+import { ArrowLeft, Building2, Edit3 } from 'lucide-react';
+import { adminService, ADMIN_API_CONNECTED } from '../services/adminService';
 import { StatusBadge } from '../components/ui/StatusBadge';
-import { mockDb } from '../repositories/mockDatabase';
+import { ActionResultNotice, failureResult, type ActionResult } from '../components/ui/ConnectionNotice';
 
 interface SchoolDetailPageProps {
   schoolId: string;
@@ -25,15 +12,20 @@ interface SchoolDetailPageProps {
 export const SchoolDetailPage: React.FC<SchoolDetailPageProps> = ({ schoolId, onNavigate }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'classes' | 'teachers' | 'licenses'>('overview');
   const [seatsEditMode, setSeatsEditMode] = useState(false);
-  const [newSeatsValue, setNewSeatsValue] = useState<number>(300);
-  const [seatsSavedToast, setSeatsSavedToast] = useState(false);
+  const [newSeatsValue, setNewSeatsValue] = useState<number>(0);
+  const [result, setResult] = useState<ActionResult | null>(null);
 
   const school = adminService.getSchoolById(schoolId);
 
   if (!school) {
     return (
       <div className="bg-white rounded-xl border border-[#E2DED5] p-12 text-center">
-        <h2 className="text-base font-bold text-[#171717]">Школа не найдена</h2>
+        <h2 className="text-base font-bold text-[#171717]">
+          {ADMIN_API_CONNECTED ? 'Школа не найдена' : 'Данные не загружены'}
+        </h2>
+        {!ADMIN_API_CONNECTED && (
+          <p className="text-xs text-[#78716C] mt-1">Сервер администрирования не подключён.</p>
+        )}
         <button
           onClick={() => onNavigate('/admin/schools')}
           className="mt-4 px-4 py-2 bg-[#FF5A36] text-white text-xs font-semibold rounded-md"
@@ -44,14 +36,18 @@ export const SchoolDetailPage: React.FC<SchoolDetailPageProps> = ({ schoolId, on
     );
   }
 
-  const schoolTeachers = mockDb.users.filter((u) => u.role === 'teacher' && u.organizationId === school.id);
-  const schoolStudents = mockDb.users.filter((u) => u.role === 'student' && u.organizationId === school.id);
+  const schoolMembers = adminService.getSchoolMembers(school.id);
+  const schoolTeachers = schoolMembers.filter((u) => u.role === 'teacher');
+  const schoolClasses = school.classesList ?? [];
 
   const handleSaveSeats = () => {
-    adminService.updateSchoolSeats(school.id, newSeatsValue);
-    setSeatsEditMode(false);
-    setSeatsSavedToast(true);
-    setTimeout(() => setSeatsSavedToast(false), 2500);
+    try {
+      adminService.updateSchoolSeats(school.id, newSeatsValue);
+      setSeatsEditMode(false);
+      setResult({ tone: 'success', text: 'Квота мест обновлена.' });
+    } catch (error) {
+      setResult(failureResult(error));
+    }
   };
 
   return (
@@ -106,6 +102,8 @@ export const SchoolDetailPage: React.FC<SchoolDetailPageProps> = ({ schoolId, on
         </div>
       </div>
 
+      <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
+
       {/* TAB 1: OVERVIEW */}
       {activeTab === 'overview' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -147,13 +145,13 @@ export const SchoolDetailPage: React.FC<SchoolDetailPageProps> = ({ schoolId, on
                 <div className="text-xl font-bold text-[#171717] mt-1">{school.totalStudents}</div>
               </div>
               <div className="p-3 bg-[#FAF9F6] border border-[#E2DED5] rounded-lg">
-                <div className="text-xs text-[#78716C]">Учителей активно</div>
+                <div className="text-xs text-[#78716C]">Преподавателей</div>
                 <div className="text-xl font-bold text-[#171717] mt-1">{school.totalTeachers}</div>
               </div>
               <div className="p-3 bg-[#EBF7F2] border border-[#258568]/20 rounded-lg">
-                <div className="text-xs text-[#1D6A53]">Занято мест</div>
+                <div className="text-xs text-[#1D6A53]">Занято мест из лицензии</div>
                 <div className="text-xl font-bold text-[#258568] mt-1">
-                  {Math.round((school.assignedSeats / school.purchasedSeats) * 100)}%
+                  {school.assignedSeats} из {school.purchasedSeats}
                 </div>
               </div>
               <div className="p-3 bg-[#FAF9F6] border border-[#E2DED5] rounded-lg">
@@ -172,16 +170,18 @@ export const SchoolDetailPage: React.FC<SchoolDetailPageProps> = ({ schoolId, on
             Список классов и параллелей
           </h3>
           <div className="divide-y divide-[#E2DED5] border border-[#E2DED5] rounded-lg overflow-hidden text-xs">
-            {(school.classesList || [
-              { id: 'c-1', name: '11-А (ФизМат)', studentCount: 28, grade: '11' },
-              { id: 'c-2', name: '11-Б (ХимБио)', studentCount: 26, grade: '11' },
-              { id: 'c-3', name: '10-А (Подготовка к ЕНТ)', studentCount: 30, grade: '10' },
-            ]).map((cl) => (
-              <div key={cl.id} className="p-3 flex items-center justify-between hover:bg-[#FAF9F6]">
-                <div className="font-semibold text-[#171717]">{cl.name}</div>
-                <span className="text-[#78716C]">{cl.studentCount} учеников</span>
-              </div>
-            ))}
+            {schoolClasses.length === 0 ? (
+              <p className="p-4 text-[#78716C]">
+                {ADMIN_API_CONNECTED ? 'Классов пока нет.' : 'Список классов не загружен.'}
+              </p>
+            ) : (
+              schoolClasses.map((cl) => (
+                <div key={cl.id} className="p-3 flex items-center justify-between hover:bg-[#FAF9F6]">
+                  <div className="font-semibold text-[#171717]">{cl.name}</div>
+                  <span className="text-[#78716C]">{cl.studentCount} учеников</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
@@ -194,7 +194,9 @@ export const SchoolDetailPage: React.FC<SchoolDetailPageProps> = ({ schoolId, on
           </h3>
           <div className="divide-y divide-[#E2DED5] border border-[#E2DED5] rounded-lg overflow-hidden text-xs">
             {schoolTeachers.length === 0 ? (
-              <p className="p-4 text-[#78716C]">Преподаватели еще не зарегистрировали профили.</p>
+              <p className="p-4 text-[#78716C]">
+                {ADMIN_API_CONNECTED ? 'Преподавателей в школе пока нет.' : 'Список преподавателей не загружен.'}
+              </p>
             ) : (
               schoolTeachers.map((t) => (
                 <div key={t.id} className="p-3 flex items-center justify-between hover:bg-[#FAF9F6]">
@@ -206,7 +208,7 @@ export const SchoolDetailPage: React.FC<SchoolDetailPageProps> = ({ schoolId, on
                     onClick={() => onNavigate(`/admin/users/${t.id}`)}
                     className="text-xs text-[#FF5A36] font-medium hover:underline"
                   >
-                    Профиль учителя →
+                    Профиль преподавателя →
                   </button>
                 </div>
               ))
@@ -276,12 +278,6 @@ export const SchoolDetailPage: React.FC<SchoolDetailPageProps> = ({ schoolId, on
                   Отмена
                 </button>
               </div>
-            </div>
-          )}
-
-          {seatsSavedToast && (
-            <div className="p-3 bg-[#EBF7F2] text-[#1D6A53] rounded-lg text-xs font-semibold flex items-center gap-2 animate-in fade-in">
-              <Check className="w-4 h-4" /> Квота мест успешно обновлена. Событие внесено в аудит.
             </div>
           )}
         </div>

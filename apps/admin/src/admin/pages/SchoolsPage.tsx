@@ -17,6 +17,7 @@ import { adminService } from '../services/adminService';
 import { DataTable, ColumnDef, TableFilter } from '../components/ui/DataTable';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { ConfirmationDialog } from '../components/ui/ConfirmationDialog';
+import { ActionResultNotice, failureResult, type ActionResult } from '../components/ui/ConnectionNotice';
 
 interface SchoolsPageProps {
   onNavigate: (path: string) => void;
@@ -32,7 +33,8 @@ export const SchoolsPage: React.FC<SchoolsPageProps> = ({ onNavigate }) => {
   const [selectedSchool, setSelectedSchool] = useState<SchoolOrganization | null>(null);
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
-  const [rejectReason, setRejectReason] = useState('Не предоставлены подтверждающие учредительные документы или БИН.');
+  const [rejectReason, setRejectReason] = useState('');
+  const [result, setResult] = useState<ActionResult | null>(null);
 
   const schools = adminService.getSchools({
     search,
@@ -42,18 +44,38 @@ export const SchoolsPage: React.FC<SchoolsPageProps> = ({ onNavigate }) => {
 
   const pendingCount = adminService.getSchools({ status: 'pending_verification' }).length;
 
-  const handleApprove = () => {
-    if (!selectedSchool) return;
-    adminService.approveSchool(selectedSchool.id);
+  // City filter options come from the schools themselves, not from a fixed list.
+  const cityOptions = Array.from(new Set(adminService.getSchools().map((s) => s.city)))
+    .sort((a, b) => a.localeCompare(b, 'ru'))
+    .map((city) => ({ label: city, value: city }));
+
+  const closeDialogs = () => {
     setApproveDialogOpen(false);
+    setRejectDialogOpen(false);
     setSelectedSchool(null);
   };
 
-  const handleReject = () => {
+  const handleApprove = () => {
     if (!selectedSchool) return;
-    adminService.rejectSchool(selectedSchool.id, rejectReason);
-    setRejectDialogOpen(false);
-    setSelectedSchool(null);
+    try {
+      adminService.approveSchool(selectedSchool.id);
+      setResult({ tone: 'success', text: 'Заявка школы одобрена.' });
+    } catch (error) {
+      setResult(failureResult(error));
+    }
+    closeDialogs();
+  };
+
+  const handleReject = () => {
+    if (!selectedSchool || !rejectReason.trim()) return;
+    try {
+      adminService.rejectSchool(selectedSchool.id, rejectReason.trim());
+      setResult({ tone: 'success', text: 'Заявка школы отклонена.' });
+    } catch (error) {
+      setResult(failureResult(error));
+    }
+    setRejectReason('');
+    closeDialogs();
   };
 
   const columns: ColumnDef<SchoolOrganization>[] = [
@@ -177,11 +199,7 @@ export const SchoolsPage: React.FC<SchoolsPageProps> = ({ onNavigate }) => {
       onChange: setCityFilter,
       options: [
         { label: 'Все города', value: 'all' },
-        { label: 'Астана', value: 'Астана' },
-        { label: 'Алматы', value: 'Алматы' },
-        { label: 'Шымкент', value: 'Шымкент' },
-        { label: 'Караганда', value: 'Караганда' },
-        { label: 'Актобе', value: 'Актобе' },
+        ...cityOptions,
       ],
     },
     {
@@ -241,6 +259,8 @@ export const SchoolsPage: React.FC<SchoolsPageProps> = ({ onNavigate }) => {
         </div>
       </div>
 
+      <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
+
       {/* Main Table */}
       <DataTable
         data={schools}
@@ -257,7 +277,7 @@ export const SchoolsPage: React.FC<SchoolsPageProps> = ({ onNavigate }) => {
       <ConfirmationDialog
         isOpen={approveDialogOpen}
         title={`Одобрить заявку: ${selectedSchool?.name}`}
-        message={`Подтвердите одобрение учебного заведения. Школа получит статус "Одобрено", активную пробную лицензию на ${selectedSchool?.purchasedSeats} мест и доступ к назначению заданий ЕНТ.`}
+        message="Статус заявки школы изменится на «Одобрено»."
         variant="primary"
         confirmLabel="Одобрить подключение"
         onConfirm={handleApprove}
@@ -268,12 +288,21 @@ export const SchoolsPage: React.FC<SchoolsPageProps> = ({ onNavigate }) => {
       <ConfirmationDialog
         isOpen={rejectDialogOpen}
         title={`Отклонить заявку: ${selectedSchool?.name}`}
-        message={`Укажите причину отклонения. Заявитель (${selectedSchool?.contactEmail}) получит уведомление.`}
+        message="Укажите причину отклонения заявки."
         variant="danger"
         confirmLabel="Отклонить заявку"
+        confirmDisabled={!rejectReason.trim()}
         onConfirm={handleReject}
         onCancel={() => setRejectDialogOpen(false)}
-      />
+      >
+        <textarea
+          rows={3}
+          value={rejectReason}
+          onChange={(e) => setRejectReason(e.target.value)}
+          placeholder="Причина отклонения"
+          className="w-full text-xs p-2.5 bg-white border border-[#E2DED5] rounded-md text-[#171717]"
+        />
+      </ConfirmationDialog>
     </div>
   );
 };

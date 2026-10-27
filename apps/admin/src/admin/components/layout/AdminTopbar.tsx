@@ -12,17 +12,13 @@ import {
   FileText,
   UserCheck,
   FileCheck2,
-  X,
 } from 'lucide-react';
-import { DemoBadge } from '../ui/DemoBadge';
-import { mockDb } from '../../repositories/mockDatabase';
-import { AdminNotification } from '../../types';
+import { adminService } from '../../services/adminService';
 
 interface AdminTopbarProps {
   currentPath: string;
   onNavigate: (path: string) => void;
   onOpenCommandPalette: () => void;
-  onOpenRoleSwitcher?: () => void;
   onToggleMobileSidebar?: () => void;
 }
 
@@ -30,14 +26,13 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
   currentPath,
   onNavigate,
   onOpenCommandPalette,
-  onOpenRoleSwitcher,
   onToggleMobileSidebar,
 }) => {
   const [quickMenuOpen, setQuickMenuOpen] = useState(false);
   const [notifMenuOpen, setNotifMenuOpen] = useState(false);
 
-  const notifications = mockDb.notifications;
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const notifications = adminService.getNotifications();
+  const unreadCount = adminService.getCounters().unreadNotifications ?? 0;
 
   // Breadcrumbs calculation
   const getBreadcrumbs = () => {
@@ -210,7 +205,7 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
             <div className="absolute right-0 mt-1 w-80 bg-white rounded-lg shadow-xl border border-[#E2DED5] overflow-hidden z-50 animate-in fade-in">
               <div className="p-3 border-b border-[#E2DED5] flex items-center justify-between bg-[#FCFBF9]">
                 <span className="text-xs font-semibold text-[#171717]">Уведомления платформы</span>
-                <span className="text-[10px] text-[#A8A29E]">{unreadCount} новых</span>
+                <span className="text-[10px] text-[#A8A29E]">{unreadCount > 0 ? `${unreadCount} новых` : ''}</span>
               </div>
               <div className="max-h-72 overflow-y-auto divide-y divide-[#E2DED5]">
                 {notifications.length === 0 ? (
@@ -220,7 +215,6 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
                     <div
                       key={notif.id}
                       onClick={() => {
-                        notif.isRead = true;
                         setNotifMenuOpen(false);
                         onNavigate(notif.linkUrl);
                       }}
@@ -254,18 +248,6 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
           )}
         </div>
 
-        {/* Demo Indicator */}
-        <DemoBadge className="hidden sm:inline-flex" />
-
-        {/* Current Role Indicator */}
-        <button
-          onClick={onOpenRoleSwitcher}
-          className="hidden lg:flex items-center gap-1.5 px-2 py-1 rounded bg-[#F0EEE8] hover:bg-[#EBE8E0] text-[11px] font-medium text-[#171717] border border-[#E2DED5] cursor-pointer"
-          title="Нажмите для переключения роли"
-        >
-          <Shield className="w-3 h-3 text-[#258568]" />
-          <span>{mockDb.currentAdminRole}</span>
-        </button>
       </div>
     </header>
   );

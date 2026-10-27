@@ -16,6 +16,7 @@ import { DataTable, ColumnDef, TableFilter } from '../components/ui/DataTable';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { ConfirmationDialog } from '../components/ui/ConfirmationDialog';
 import { ExportDialog } from '../components/ui/ExportDialog';
+import { ActionResultNotice, failureResult, type ActionResult } from '../components/ui/ConnectionNotice';
 
 interface UsersPageProps {
   onNavigate: (path: string) => void;
@@ -35,6 +36,7 @@ export const UsersPage: React.FC<UsersPageProps> = ({ onNavigate }) => {
   }>({ open: false });
 
   const [exportOpen, setExportOpen] = useState(false);
+  const [result, setResult] = useState<ActionResult | null>(null);
 
   const users = adminService.getUsers({
     search,
@@ -45,7 +47,12 @@ export const UsersPage: React.FC<UsersPageProps> = ({ onNavigate }) => {
   const handleConfirmAction = () => {
     if (!confirmDialog.user || !confirmDialog.action) return;
     const newStatus: AccountStatus = confirmDialog.action === 'suspend' ? 'suspended' : 'active';
-    adminService.updateUserStatus(confirmDialog.user.id, newStatus);
+    try {
+      adminService.updateUserStatus(confirmDialog.user.id, newStatus);
+      setResult({ tone: 'success', text: newStatus === 'suspended' ? 'Доступ приостановлен.' : 'Доступ восстановлен.' });
+    } catch (error) {
+      setResult(failureResult(error));
+    }
     setConfirmDialog({ open: false });
   };
 
@@ -190,6 +197,10 @@ export const UsersPage: React.FC<UsersPageProps> = ({ onNavigate }) => {
   ];
 
   const handleExport = (format: 'csv' | 'json', options: { includePii: boolean }) => {
+    if (users.length === 0) {
+      setResult({ tone: 'error', text: 'Список пуст: выгружать нечего.' });
+      return;
+    }
     const dataToExport = users.map((u) => ({
       ID: u.id,
       Имя: u.name,
@@ -239,6 +250,8 @@ export const UsersPage: React.FC<UsersPageProps> = ({ onNavigate }) => {
           <Download className="w-3.5 h-3.5 text-[#78716C]" /> Экспорт реестра
         </button>
       </div>
+
+      <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
 
       {/* Main Data Table */}
       <DataTable

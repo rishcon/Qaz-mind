@@ -29,20 +29,13 @@ import { RolesPage } from './admin/pages/RolesPage';
 import { SettingsPage } from './admin/pages/SettingsPage';
 import { QuestionEditor } from './admin/components/editors/QuestionEditor';
 import { ImportWizard } from './admin/components/editors/ImportWizard';
-import { mockDb } from './admin/repositories/mockDatabase';
 import { adminService } from './admin/services/adminService';
-import { ArrowLeft, ExternalLink, ShieldAlert, BookOpen, GraduationCap, Building2 } from 'lucide-react';
-import { ADMIN_DEMO_MODE } from './config';
-import { AccessGate } from './admin/components/layout/AccessGate';
-import { DemoBanner } from './admin/components/ui/DemoBanner';
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState<string>(() => {
     const p = window.location.pathname;
     return p.startsWith('/admin') ? p : '/admin';
   });
-
-  const [activeWorkspace, setActiveWorkspace] = useState<'admin' | 'student' | 'teacher' | 'school' | 'landing'>('admin');
 
   // Sync with browser history
   useEffect(() => {
@@ -59,104 +52,6 @@ export default function App() {
     window.history.pushState(null, '', path);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-
-  // Without a verified sign-in the panel is closed outside demo mode: nothing behind the gate is rendered.
-  if (!ADMIN_DEMO_MODE) {
-    return <AccessGate />;
-  }
-
-  // If switched to an ecosystem portal preview
-  if (activeWorkspace !== 'admin') {
-    return (
-      <div className="min-h-screen bg-[#F5F3EE] text-[#171717] flex flex-col font-sans">
-        <DemoBanner />
-        {/* Workspace Ecosystem Return Header */}
-        <div className="bg-[#171717] text-white px-4 py-2.5 flex items-center justify-between text-xs border-b border-black shrink-0">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-[#FF5A36]">qazmind.</span>
-            <span className="text-[#A8A29E]">
-              <span className="text-[#FF5A36] mr-1">[демо-данные]</span>
-              {activeWorkspace === 'student' && 'Кабинет ученика ЕНТ (Предпросмотр)'}
-              {activeWorkspace === 'teacher' && 'Кабинет учителя (Предпросмотр)'}
-              {activeWorkspace === 'school' && 'Кабинет школы (Предпросмотр)'}
-              {activeWorkspace === 'landing' && 'Публичный портал QazMind'}
-            </span>
-          </div>
-
-          <button
-            onClick={() => setActiveWorkspace('admin')}
-            className="flex items-center gap-1.5 px-3 py-1 rounded bg-[#FF5A36] hover:bg-[#E84D2B] text-white font-semibold text-xs cursor-pointer shadow-xs transition-colors"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Вернуться в QazMind Admin
-          </button>
-        </div>
-
-        {/* Workspace preview body */}
-        <div className="flex-1 p-6 md:p-12 max-w-5xl mx-auto w-full space-y-6">
-          {activeWorkspace === 'student' && (
-            <div className="space-y-6">
-              <div className="bg-white rounded-xl border border-[#E2DED5] p-6 shadow-xs flex justify-between items-center">
-                <div>
-                  <h1 className="text-xl font-bold text-[#171717]">Сәлем, Аружан! Дайындық барысы</h1>
-                  <p className="text-xs text-[#78716C] mt-1">ЕНТ 2026: Мақсатты балл — 135 / 140</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-2xl font-bold text-[#FF5A36]">126</span>
-                  <div className="text-[10px] text-[#258568] font-semibold">Соңғы срез нәтижесі</div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white p-5 rounded-xl border border-[#E2DED5]">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#78716C]">Қазақстан тарихы</h3>
-                  <p className="text-base font-bold text-[#171717] mt-1">18/20 балл</p>
-                </div>
-                <div className="bg-white p-5 rounded-xl border border-[#E2DED5]">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#78716C]">Мат. сауаттылық</h3>
-                  <p className="text-base font-bold text-[#171717] mt-1">9/10 балл</p>
-                </div>
-                <div className="bg-white p-5 rounded-xl border border-[#E2DED5]">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#78716C]">Математика (Бейіндік)</h3>
-                  <p className="text-base font-bold text-[#171717] mt-1">42/50 балл</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeWorkspace === 'teacher' && (
-            <div className="bg-white rounded-xl border border-[#E2DED5] p-6 shadow-xs space-y-4">
-              <h1 className="text-xl font-bold text-[#171717]">Кабинет преподавателя: 11-А класс</h1>
-              <p className="text-xs text-[#78716C]">Школа-лицей №79 г. Астана • История Казахстана</p>
-              <div className="p-4 bg-[#FAF9F6] border border-[#E2DED5] rounded-lg text-xs">
-                Учитель может создавать домашние задания из верифицированного банка вопросов QazMind Admin.
-              </div>
-            </div>
-          )}
-
-          {activeWorkspace === 'school' && (
-            <div className="bg-white rounded-xl border border-[#E2DED5] p-6 shadow-xs space-y-4">
-              <h1 className="text-xl font-bold text-[#171717]">Кабинет администрации школы</h1>
-              <p className="text-xs text-[#78716C]">Школа-лицей №79 • 340 учащихся на платформе QazMind</p>
-              <div className="p-4 bg-[#FAF9F6] border border-[#E2DED5] rounded-lg text-xs">
-                Доступно управление классами и лицензионным пулом, выделенным администратором платформы.
-              </div>
-            </div>
-          )}
-
-          {activeWorkspace === 'landing' && (
-            <div className="bg-white rounded-xl border border-[#E2DED5] p-8 text-center space-y-4">
-              <div className="text-2xl font-bold text-[#171717]">
-                qazmind<span className="text-[#FF5A36]">.</span>
-              </div>
-              <p className="text-sm text-[#78716C] max-w-md mx-auto">
-                Интеллектуальная образовательная платформа для эффективной подготовки к ЕНТ / ҰБТ в Казахстане.
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
 
   // Admin Route Resolver
   const renderAdminContent = () => {
@@ -250,15 +145,8 @@ export default function App() {
   };
 
   return (
-    <>
-      <AdminLayout
-        currentPath={currentPath}
-        onNavigate={navigateTo}
-        onSwitchWorkspace={(ws) => setActiveWorkspace(ws)}
-      >
-        {renderAdminContent()}
-      </AdminLayout>
-      <DemoBanner />
-    </>
+    <AdminLayout currentPath={currentPath} onNavigate={navigateTo}>
+      {renderAdminContent()}
+    </AdminLayout>
   );
 }

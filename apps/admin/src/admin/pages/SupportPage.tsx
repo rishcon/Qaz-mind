@@ -13,30 +13,40 @@ import { SupportTicket } from '../types';
 import { adminService } from '../services/adminService';
 import { DataTable, ColumnDef, TableFilter } from '../components/ui/DataTable';
 import { StatusBadge } from '../components/ui/StatusBadge';
-import { mockDb } from '../repositories/mockDatabase';
+import { ActionResultNotice, failureResult, type ActionResult } from '../components/ui/ConnectionNotice';
 
 export const SupportPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [responseText, setResponseText] = useState('');
   const [isInternalNote, setIsInternalNote] = useState(false);
+  const [result, setResult] = useState<ActionResult | null>(null);
 
   const tickets = adminService.getSupportTickets({ status: statusFilter });
 
   const activeTicket = selectedTicket
-    ? mockDb.supportTickets.find((t) => t.id === selectedTicket.id) || selectedTicket
+    ? tickets.find((t) => t.id === selectedTicket.id) || selectedTicket
     : null;
 
+  // A refused send keeps the typed text in the composer.
   const handleSendMessage = () => {
     if (!activeTicket || !responseText.trim()) return;
-    adminService.addSupportMessage(activeTicket.id, responseText, isInternalNote);
-    setResponseText('');
-    setIsInternalNote(false);
+    try {
+      adminService.addSupportMessage(activeTicket.id, responseText, isInternalNote);
+      setResponseText('');
+      setIsInternalNote(false);
+    } catch (error) {
+      setResult(failureResult(error));
+    }
   };
 
   const handleChangeStatus = (newStatus: SupportTicket['status']) => {
     if (!activeTicket) return;
-    adminService.updateTicketStatus(activeTicket.id, newStatus);
+    try {
+      adminService.updateTicketStatus(activeTicket.id, newStatus);
+    } catch (error) {
+      setResult(failureResult(error));
+    }
   };
 
   const columns: ColumnDef<SupportTicket>[] = [
@@ -118,6 +128,8 @@ export const SupportPage: React.FC = () => {
           Обработка вопросов учащихся, координаторов школ и разбор спорных ситуаций.
         </p>
       </div>
+
+      <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Tickets Table */}

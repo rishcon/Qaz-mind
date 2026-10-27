@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   FileCheck2,
-  CheckCircle2,
   AlertTriangle,
   XCircle,
   HelpCircle,
@@ -12,9 +11,12 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { QuestionItem } from '../types';
-import { adminService } from '../services/adminService';
+import { adminService, ADMIN_API_CONNECTED } from '../services/adminService';
 import { StatusBadge } from '../components/ui/StatusBadge';
-import { mockDb } from '../repositories/mockDatabase';
+import { ActionResultNotice, failureResult, type ActionResult } from '../components/ui/ConnectionNotice';
+
+/** null means "not loaded": shown as a dash, never as zero. */
+const num = (value: number | null) => (value === null ? '—' : String(value));
 
 interface QuestionReviewPageProps {
   onNavigate: (path: string) => void;
@@ -23,34 +25,40 @@ interface QuestionReviewPageProps {
 export const QuestionReviewPage: React.FC<QuestionReviewPageProps> = ({ onNavigate }) => {
   const [selectedQuestionId, setSelectedQuestionId] = useState<string>('');
   const [reviewerNotes, setReviewerNotes] = useState('');
-  const [actionDoneToast, setActionDoneToast] = useState<string | null>(null);
+  const [result, setResult] = useState<ActionResult | null>(null);
 
-  const reviewQueue = mockDb.questions.filter(
+  const questions = adminService.getQuestions();
+  const reviewQueue = questions.filter(
     (q) => q.status === 'in_review' || q.status === 'draft' || q.status === 'changes_requested'
   );
 
   const selectedQuestion =
     reviewQueue.find((q) => q.id === selectedQuestionId) || reviewQueue[0];
 
-  // Quality metrics
-  const missingExplanations = mockDb.questions.filter((q) => !q.explanationRu || q.explanationRu.length < 10).length;
-  const missingKz = mockDb.questions.filter((q) => !q.textKz || q.textKz.length < 5).length;
-  const reportedCount = mockDb.contentReports.filter((r) => r.status === 'pending').length;
+  // Quality metrics: computed only from loaded data; without the server they are not loaded.
+  const queueCount = ADMIN_API_CONNECTED ? reviewQueue.length : null;
+  const missingExplanations = ADMIN_API_CONNECTED
+    ? questions.filter((q) => !q.explanationRu || q.explanationRu.length < 10).length
+    : null;
+  const missingKz = ADMIN_API_CONNECTED ? questions.filter((q) => !q.textKz || q.textKz.length < 5).length : null;
+  const reportedCount = adminService.getCounters().pendingReports;
 
-  const handleReviewAction = (action: 'approve' | 'request_changes' | 'reject' | 'publish') => {
+  // Publication goes through approval first (lifecycle: in_review -> approved -> published), so there is no direct publish.
+  const handleReviewAction = (action: 'approve' | 'request_changes' | 'reject') => {
     if (!selectedQuestion) return;
-    adminService.reviewQuestion(selectedQuestion.id, action, reviewerNotes);
-    setReviewerNotes('');
-    const actionLabel =
-      action === 'approve'
-        ? 'Вопрос одобрен'
-        : action === 'publish'
-        ? 'Вопрос опубликован в боевой реестр'
-        : action === 'request_changes'
-        ? 'Отправлены замечания автору'
-        : 'Вопрос отклонен';
-    setActionDoneToast(actionLabel);
-    setTimeout(() => setActionDoneToast(null), 3000);
+    try {
+      adminService.reviewQuestion(selectedQuestion.id, action, reviewerNotes);
+      setReviewerNotes('');
+      const actionLabel =
+        action === 'approve'
+          ? 'Вопрос утверждён.'
+          : action === 'request_changes'
+          ? 'Замечания отправлены автору.'
+          : 'Вопрос отклонён.';
+      setResult({ tone: 'success', text: actionLabel });
+    } catch (error) {
+      setResult(failureResult(error));
+    }
   };
 
   return (
@@ -69,27 +77,23 @@ export const QuestionReviewPage: React.FC<QuestionReviewPageProps> = ({ onNaviga
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
         <div className="bg-white p-4 rounded-xl border border-[#E2DED5]">
           <span className="text-xs text-[#78716C]">На рецензировании</span>
-          <div className="text-xl font-bold text-[#FF5A36] mt-1">{reviewQueue.length}</div>
+          <div className="text-xl font-bold text-[#FF5A36] mt-1">{num(queueCount)}</div>
         </div>
         <div className="bg-white p-4 rounded-xl border border-[#E2DED5]">
           <span className="text-xs text-[#78716C]">Жалобы учащихся</span>
-          <div className="text-xl font-bold text-[#C94A43] mt-1">{reportedCount}</div>
+          <div className="text-xl font-bold text-[#C94A43] mt-1">{num(reportedCount)}</div>
         </div>
         <div className="bg-white p-4 rounded-xl border border-[#E2DED5]">
           <span className="text-xs text-[#78716C]">Без перевода (KZ)</span>
-          <div className="text-xl font-bold text-[#D89B35] mt-1">{missingKz}</div>
+          <div className="text-xl font-bold text-[#D89B35] mt-1">{num(missingKz)}</div>
         </div>
         <div className="bg-white p-4 rounded-xl border border-[#E2DED5]">
           <span className="text-xs text-[#78716C]">Без пояснений</span>
-          <div className="text-xl font-bold text-[#171717] mt-1">{missingExplanations}</div>
+          <div className="text-xl font-bold text-[#171717] mt-1">{num(missingExplanations)}</div>
         </div>
       </div>
 
-      {actionDoneToast && (
-        <div className="p-3 bg-[#EBF7F2] border border-[#258568]/30 rounded-xl text-xs font-semibold text-[#1D6A53] flex items-center gap-2 animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4" /> {actionDoneToast}. Событие зафиксировано в журнале аудита.
-        </div>
-      )}
+      <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
 
       {/* Main Review Split View */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -97,14 +101,14 @@ export const QuestionReviewPage: React.FC<QuestionReviewPageProps> = ({ onNaviga
         <div className="bg-white rounded-xl border border-[#E2DED5] p-4 space-y-2">
           <div className="flex items-center justify-between pb-2 border-b border-[#E2DED5]">
             <h2 className="text-xs font-bold uppercase tracking-wider text-[#78716C]">
-              Очередь на проверку ({reviewQueue.length})
+              Очередь на проверку ({num(queueCount)})
             </h2>
           </div>
 
           <div className="space-y-1.5 max-h-[550px] overflow-y-auto pr-1">
             {reviewQueue.length === 0 ? (
               <div className="p-6 text-center text-xs text-[#78716C]">
-                Все вопросы проверены! Очередь пуста.
+                {ADMIN_API_CONNECTED ? 'В очереди нет вопросов.' : 'Очередь не загружена: сервер администрирования не подключён.'}
               </div>
             ) : (
               reviewQueue.map((q) => {
@@ -260,14 +264,6 @@ export const QuestionReviewPage: React.FC<QuestionReviewPageProps> = ({ onNaviga
                   className="px-4 py-1.5 text-xs font-semibold text-white bg-[#258568] hover:bg-[#1D6A53] rounded-md flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Check className="w-4 h-4" /> Утвердить вопрос
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleReviewAction('publish')}
-                  className="px-4 py-1.5 text-xs font-semibold text-white bg-[#FF5A36] hover:bg-[#E84D2B] rounded-md flex items-center gap-1.5 cursor-pointer shadow-xs"
-                >
-                  <CheckCircle2 className="w-4 h-4" /> Опубликовать сразу
                 </button>
               </div>
             </div>

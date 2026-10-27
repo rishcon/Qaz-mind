@@ -1,16 +1,40 @@
 import React, { useState } from 'react';
-import { Settings, Save, CheckCircle2, ShieldAlert, BookOpen, Globe } from 'lucide-react';
+import { Save, ShieldAlert, BookOpen, Globe } from 'lucide-react';
 import { PlatformSettings } from '../types';
 import { adminService } from '../services/adminService';
+import { ActionResultNotice, failureResult, type ActionResult } from '../components/ui/ConnectionNotice';
 
+/** Without settings from the server, the form is not drawn: nothing is shown as if it were the real configuration. */
 export const SettingsPage: React.FC = () => {
-  const [settings, setSettings] = useState<PlatformSettings>(adminService.getSettings());
-  const [savedToast, setSavedToast] = useState(false);
+  const loaded = adminService.getSettings();
+  if (loaded === null) {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-150 max-w-4xl">
+        <div className="pb-2 border-b border-[#E2DED5]">
+          <h1 className="text-xl font-bold text-[#171717]">Настройки платформы QazMind</h1>
+          <p className="text-xs text-[#78716C] mt-0.5">Глобальная конфигурация, параметры ЕНТ и политики безопасности.</p>
+        </div>
+        <div className="bg-white rounded-xl border border-[#E2DED5] p-6 text-xs text-[#78716C]">
+          Данные не загружены: сервер администрирования не подключён. Настройки не отображаются, чтобы не показать значения,
+          которых нет на сервере.
+        </div>
+      </div>
+    );
+  }
+  return <SettingsForm initial={loaded} />;
+};
+
+const SettingsForm: React.FC<{ initial: PlatformSettings }> = ({ initial }) => {
+  const [settings, setSettings] = useState<PlatformSettings>(initial);
+  const [result, setResult] = useState<ActionResult | null>(null);
 
   const handleSave = () => {
-    adminService.updateSettings(settings);
-    setSavedToast(true);
-    setTimeout(() => setSavedToast(false), 2500);
+    try {
+      adminService.updateSettings(settings);
+      setResult({ tone: 'success', text: 'Настройки сохранены.' });
+    } catch (error) {
+      setResult(failureResult(error));
+    }
   };
 
   return (
@@ -32,11 +56,7 @@ export const SettingsPage: React.FC = () => {
         </button>
       </div>
 
-      {savedToast && (
-        <div className="p-3 bg-[#EBF7F2] border border-[#258568]/30 rounded-xl text-xs font-semibold text-[#1D6A53] flex items-center gap-2 animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4" /> Настройки сохранены и зафиксированы в журнале аудита!
-        </div>
-      )}
+      <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
 
       {/* General Settings */}
       <div className="bg-white rounded-xl border border-[#E2DED5] p-5 shadow-xs space-y-4">

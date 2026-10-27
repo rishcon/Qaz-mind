@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ActionResultNotice, failureResult, type ActionResult } from '../ui/ConnectionNotice';
 import {
   Save,
   Eye,
@@ -20,7 +21,6 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { LessonItem, LessonContentBlock, ContentStatus } from '../../types';
-import { mockDb } from '../../repositories/mockDatabase';
 import { adminService } from '../../services/adminService';
 import { StatusBadge } from '../ui/StatusBadge';
 
@@ -35,9 +35,9 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   onSave,
   onCancel,
 }) => {
-  const subjects = mockDb.subjects;
-  const [subjectId, setSubjectId] = useState(initialLesson?.subjectId || subjects[0]?.id || 'history_kz');
-  const topics = mockDb.topics.filter((t) => t.subjectId === subjectId);
+  const subjects = adminService.getSubjects();
+  const [subjectId, setSubjectId] = useState(initialLesson?.subjectId || subjects[0]?.id || '');
+  const topics = adminService.getTopics(subjectId);
   const [topicId, setTopicId] = useState(initialLesson?.topicId || topics[0]?.id || '');
 
   const [titleRu, setTitleRu] = useState(initialLesson?.titleRu || '');
@@ -46,37 +46,19 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>(initialLesson?.difficulty || 'medium');
   const [language, setLanguage] = useState<'ru' | 'kz' | 'both'>(initialLesson?.language || 'both');
   const [status, setStatus] = useState<ContentStatus>(initialLesson?.status || 'draft');
-  const [objectivesText, setObjectivesText] = useState(
-    (initialLesson?.learningObjectives || [
-      'Усвоить ключевые исторические даты и хронологию событий',
-      'Уметь анализировать причинно-следственные связи',
-    ]).join('\n')
-  );
+  // A new lesson starts empty: no objectives or blocks are invented for the author.
+  const [objectivesText, setObjectivesText] = useState((initialLesson?.learningObjectives ?? []).join('\n'));
 
-  const [blocksRu, setBlocksRu] = useState<LessonContentBlock[]>(
-    initialLesson?.blocksRu || [
-      { id: 'b-1', type: 'heading', content: 'Введение в тему урока' },
-      { id: 'b-2', type: 'paragraph', content: 'Основной теоретический материал урока...' },
-      { id: 'b-3', type: 'important_fact', content: 'Ключевой факт для подготовки к ЕНТ...' },
-    ]
-  );
+  const [blocksRu, setBlocksRu] = useState<LessonContentBlock[]>(initialLesson?.blocksRu ?? []);
 
   const [activeTab, setActiveTab] = useState<'ru' | 'kz' | 'preview'>('ru');
+  const [result, setResult] = useState<ActionResult | null>(null);
 
   const addBlock = (type: LessonContentBlock['type']) => {
     const newBlock: LessonContentBlock = {
       id: `b-${Date.now().toString(36)}`,
       type,
-      content:
-        type === 'heading'
-          ? 'Новый подзаголовок'
-          : type === 'important_fact'
-          ? 'Важный факт для запоминания'
-          : type === 'callout'
-          ? 'Обратите внимание'
-          : type === 'quote'
-          ? 'Цитата исторического деятеля...'
-          : 'Введите текст блока...',
+      content: '',
     };
     setBlocksRu([...blocksRu, newBlock]);
   };
@@ -100,6 +82,15 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   };
 
   const handleSave = (newStatus: ContentStatus) => {
+    const problems: string[] = [];
+    if (!titleRu.trim()) problems.push('укажите название урока на русском');
+    if (!topicId) problems.push('выберите тему урока');
+    if (blocksRu.some((b) => !b.content.trim())) problems.push('заполните или удалите пустые блоки');
+    if (problems.length > 0) {
+      setResult({ tone: 'error', text: `Урок не сохранён: ${problems.join('; ')}.` });
+      return;
+    }
+
     const objectives = objectivesText
       .split('\n')
       .map((o) => o.trim())
@@ -108,7 +99,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     const lesson: LessonItem = {
       id: initialLesson?.id || `les-${Date.now().toString(36)}`,
       subjectId,
-      topicId: topicId || (topics[0]?.id ?? 'default-topic'),
+      topicId,
       titleRu,
       titleKz,
       language,
@@ -118,18 +109,24 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
       learningObjectives: objectives,
       blocksRu,
       blocksKz: initialLesson?.blocksKz || [],
-      author: initialLesson?.author || mockDb.currentAdminName,
+      author: initialLesson?.author || (adminService.getCurrentAdmin().name ?? ''),
       version: (initialLesson?.version || 0) + 1,
       lastModifiedAt: new Date().toISOString(),
       publishedAt: newStatus === 'published' ? new Date().toISOString() : initialLesson?.publishedAt,
     };
 
-    adminService.saveLesson(lesson);
-    onSave(lesson);
+    try {
+      adminService.saveLesson(lesson);
+      onSave(lesson);
+    } catch (error) {
+      setResult(failureResult(error));
+    }
   };
 
   return (
     <div className="space-y-6">
+      <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
+
       {/* Top Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[#E2DED5]">
         <div className="flex items-center gap-3">
@@ -246,7 +243,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                   value={subjectId}
                   onChange={(e) => {
                     setSubjectId(e.target.value);
-                    const subTopics = mockDb.topics.filter((t) => t.subjectId === e.target.value);
+                    const subTopics = adminService.getTopics(e.target.value);
                     setTopicId(subTopics[0]?.id || '');
                   }}
                   className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#E2DED5] rounded-md text-[#171717]"
@@ -321,7 +318,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                   type="text"
                   value={titleRu}
                   onChange={(e) => setTitleRu(e.target.value)}
-                  placeholder="Например: Образование Казахского ханства при ханах Керее и Жанибеке"
+                  placeholder="Название урока"
                   className="w-full text-sm font-semibold px-3 py-2 bg-white border border-[#E2DED5] rounded-md focus:border-[#FF5A36] focus:outline-none"
                 />
               </div>

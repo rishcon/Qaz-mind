@@ -1,41 +1,44 @@
 import React, { useState } from 'react';
-import {
-  ArrowLeft,
-  User,
-  GraduationCap,
-  Building2,
-  Activity,
-  Shield,
-  Clock,
-  BookOpen,
-  Award,
-  CheckCircle2,
-  AlertTriangle,
-  RotateCcw,
-  Check,
-} from 'lucide-react';
-import { adminService } from '../services/adminService';
+import { ArrowLeft, User, GraduationCap, Building2, Activity, Shield, RotateCcw } from 'lucide-react';
+import { adminService, ADMIN_API_CONNECTED } from '../services/adminService';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { ConfirmationDialog } from '../components/ui/ConfirmationDialog';
-import { mockDb } from '../repositories/mockDatabase';
+import { ActionResultNotice, failureResult, type ActionResult } from '../components/ui/ConnectionNotice';
+import type { UserAccountType } from '../types';
 
 interface UserDetailPageProps {
   userId: string;
   onNavigate: (path: string) => void;
 }
 
+const ROLE_TITLES: Record<UserAccountType, string> = {
+  student: 'Ученик',
+  teacher: 'Преподаватель',
+  school_admin: 'Администратор школы',
+  platform_admin: 'Администратор платформы',
+};
+
+/** Shows a number when the server sent it. A missing value is a dash, never zero. */
+const valueOrDash = (value: number | undefined, suffix = '') => (value === undefined ? '—' : `${value}${suffix}`);
+
 export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNavigate }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'learning' | 'org' | 'activity' | 'security'>('overview');
-  const [revokedToast, setRevokedToast] = useState(false);
   const [confirmSuspendOpen, setConfirmSuspendOpen] = useState(false);
+  const [result, setResult] = useState<ActionResult | null>(null);
 
   const user = adminService.getUserById(userId);
 
   if (!user) {
     return (
       <div className="bg-white rounded-xl border border-[#E2DED5] p-12 text-center">
-        <h2 className="text-base font-bold text-[#171717]">Пользователь не найден</h2>
-        <p className="text-xs text-[#78716C] mt-1">ID #{userId} отсутствует в базе данных.</p>
+        <h2 className="text-base font-bold text-[#171717]">
+          {ADMIN_API_CONNECTED ? 'Пользователь не найден' : 'Данные не загружены'}
+        </h2>
+        <p className="text-xs text-[#78716C] mt-1">
+          {ADMIN_API_CONNECTED
+            ? `ID #${userId} отсутствует в базе данных.`
+            : `Сервер администрирования не подключён: карточка ID #${userId} недоступна.`}
+        </p>
         <button
           onClick={() => onNavigate('/admin/users')}
           className="mt-4 px-4 py-2 bg-[#FF5A36] text-white text-xs font-semibold rounded-md"
@@ -47,19 +50,27 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
   }
 
   const handleRevokeSessions = () => {
-    adminService.revokeUserSessions(user.id);
-    setRevokedToast(true);
-    setTimeout(() => setRevokedToast(false), 2500);
+    try {
+      adminService.revokeUserSessions(user.id);
+      setResult({ tone: 'success', text: 'Сессии пользователя завершены.' });
+    } catch (error) {
+      setResult(failureResult(error));
+    }
   };
 
   const handleToggleSuspend = () => {
     const nextStatus = user.status === 'suspended' ? 'active' : 'suspended';
-    adminService.updateUserStatus(user.id, nextStatus);
     setConfirmSuspendOpen(false);
+    try {
+      adminService.updateUserStatus(user.id, nextStatus);
+      setResult({ tone: 'success', text: nextStatus === 'active' ? 'Доступ восстановлен.' : 'Доступ приостановлен.' });
+    } catch (error) {
+      setResult(failureResult(error));
+    }
   };
 
   // Scoped activity for this user
-  const userActivities = mockDb.userActivity.filter((a) => a.userId === user.id);
+  const userActivities = adminService.getUserActivity({ userId: user.id });
 
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
@@ -84,7 +95,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
                 <StatusBadge status={user.status} />
               </div>
               <p className="text-xs text-[#78716C] mt-0.5">
-                {user.email} • ID: <span className="font-mono">{user.id}</span> • {user.city || 'Казахстан'}
+                {user.email} • ID: <span className="font-mono">{user.id}</span> • {user.city ?? '—'}
               </p>
             </div>
           </div>
@@ -132,6 +143,8 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
         </div>
       </div>
 
+      <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
+
       {/* TAB 1: OVERVIEW */}
       {activeTab === 'overview' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -150,11 +163,11 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
               </div>
               <div className="py-2.5 flex justify-between">
                 <span className="text-[#78716C]">Телефон:</span>
-                <span className="font-mono text-[#171717]">{user.phone || '+7 (демо-режим)'}</span>
+                <span className="font-mono text-[#171717]">{user.phone ?? '—'}</span>
               </div>
               <div className="py-2.5 flex justify-between">
                 <span className="text-[#78716C]">Тип аккаунта:</span>
-                <span className="font-semibold capitalize text-[#FF5A36]">{user.role}</span>
+                <span className="font-semibold text-[#FF5A36]">{ROLE_TITLES[user.role]}</span>
               </div>
               <div className="py-2.5 flex justify-between">
                 <span className="text-[#78716C]">Дата регистрации:</span>
@@ -173,19 +186,21 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
               <div className="divide-y divide-[#E2DED5] text-xs">
                 <div className="py-2.5 flex justify-between">
                   <span className="text-[#78716C]">Целевой балл ЕНТ:</span>
-                  <span className="font-bold text-[#FF5A36] text-sm">{user.targetEntScore !== undefined ? `${user.targetEntScore} / 140` : 'не указана'}</span>
+                  <span className="font-bold text-[#FF5A36] text-sm">
+                    {user.targetEntScore !== undefined ? `${user.targetEntScore} / 140` : 'не указана'}
+                  </span>
                 </div>
                 <div className="py-2.5 flex justify-between">
                   <span className="text-[#78716C]">Средний результат срезов:</span>
-                  <span className="font-bold text-[#258568]">{user.averageScore || 0} баллов</span>
+                  <span className="font-bold text-[#258568]">{valueOrDash(user.averageScore, ' баллов')}</span>
                 </div>
                 <div className="py-2.5 flex justify-between">
                   <span className="text-[#78716C]">Пройдено уроков:</span>
-                  <span className="font-semibold text-[#171717]">{user.completedLessonsCount || 0} тем</span>
+                  <span className="font-semibold text-[#171717]">{valueOrDash(user.completedLessonsCount, ' тем')}</span>
                 </div>
                 <div className="py-2.5 flex justify-between">
                   <span className="text-[#78716C]">Попыток сдачи ЕНТ:</span>
-                  <span className="font-semibold text-[#171717]">{user.examAttemptsCount || 0}</span>
+                  <span className="font-semibold text-[#171717]">{valueOrDash(user.examAttemptsCount)}</span>
                 </div>
               </div>
             ) : (
@@ -206,15 +221,17 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="p-4 rounded-lg bg-[#FAF9F6] border border-[#E2DED5] text-xs">
               <div className="text-[#78716C]">Всего завершено уроков</div>
-              <div className="text-xl font-bold text-[#171717] mt-1">{user.completedLessonsCount || 0}</div>
+              <div className="text-xl font-bold text-[#171717] mt-1">{valueOrDash(user.completedLessonsCount)}</div>
             </div>
             <div className="p-4 rounded-lg bg-[#FAF9F6] border border-[#E2DED5] text-xs">
               <div className="text-[#78716C]">Практических сессий</div>
-              <div className="text-xl font-bold text-[#171717] mt-1">{user.practiceAttemptsCount || 0}</div>
+              <div className="text-xl font-bold text-[#171717] mt-1">{valueOrDash(user.practiceAttemptsCount)}</div>
             </div>
             <div className="p-4 rounded-lg bg-[#EBF7F2] border border-[#258568]/20 text-xs">
               <div className="text-[#1D6A53]">Средний балл на срезах ЕНТ</div>
-              <div className="text-xl font-bold text-[#258568] mt-1">{user.averageScore !== undefined ? `${user.averageScore} из 140` : 'нет данных'}</div>
+              <div className="text-xl font-bold text-[#258568] mt-1">
+                {user.averageScore !== undefined ? `${user.averageScore} из 140` : 'нет данных'}
+              </div>
             </div>
           </div>
 
@@ -222,7 +239,9 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
             <h4 className="text-xs font-semibold text-[#171717] mb-2">Недавние сдачи пробных экзаменов</h4>
             <div className="divide-y divide-[#E2DED5] border border-[#E2DED5] rounded-lg overflow-hidden text-xs">
               <div className="p-3 bg-[#FCFBF9] text-[#78716C]">
-                Сданных пробных экзаменов в демо-данных нет. Список появится, когда пробники будут работать на сервере.
+                {ADMIN_API_CONNECTED
+                  ? 'Пробных экзаменов пока нет.'
+                  : 'Список сданных пробных экзаменов не загружен: сервер администрирования не подключён.'}
               </div>
             </div>
           </div>
@@ -240,7 +259,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
               <div>
                 <div className="text-sm font-bold text-[#171717]">{user.organizationName}</div>
                 <div className="text-xs text-[#78716C] mt-0.5">
-                  ID школы: {user.organizationId} • Город: {user.city}
+                  ID школы: {user.organizationId} • Город: {user.city ?? '—'}
                 </div>
               </div>
               <button
@@ -311,12 +330,6 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
               </button>
             </div>
           </div>
-
-          {revokedToast && (
-            <div className="p-3 bg-[#EBF7F2] text-[#1D6A53] rounded-lg text-xs font-semibold flex items-center gap-2 animate-in fade-in">
-              <Check className="w-4 h-4" /> Сессии пользователя успешно сброшены. Действие зафиксировано в аудите.
-            </div>
-          )}
         </div>
       )}
 

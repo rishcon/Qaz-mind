@@ -5,6 +5,7 @@ import { adminService } from '../services/adminService';
 import { DataTable, ColumnDef, TableFilter } from '../components/ui/DataTable';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { LessonEditor } from '../components/editors/LessonEditor';
+import { ActionResultNotice, failureResult, type ActionResult } from '../components/ui/ConnectionNotice';
 
 interface LessonsPageProps {
   onNavigate: (path: string) => void;
@@ -17,6 +18,7 @@ export const LessonsPage: React.FC<LessonsPageProps> = ({ onNavigate }) => {
 
   // Editor mode
   const [editingLesson, setEditingLesson] = useState<LessonItem | null | undefined>(undefined);
+  const [result, setResult] = useState<ActionResult | null>(null);
 
   const lessons = adminService.getLessons({
     subjectId: subjectFilter,
@@ -28,7 +30,12 @@ export const LessonsPage: React.FC<LessonsPageProps> = ({ onNavigate }) => {
 
   const handlePublish = (lessonId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    adminService.publishLesson(lessonId);
+    try {
+      adminService.publishLesson(lessonId);
+      setResult({ tone: 'success', text: 'Урок опубликован.' });
+    } catch (error) {
+      setResult(failureResult(error));
+    }
   };
 
   const columns: ColumnDef<LessonItem>[] = [
@@ -173,6 +180,8 @@ export const LessonsPage: React.FC<LessonsPageProps> = ({ onNavigate }) => {
           <Plus className="w-4 h-4" /> Создать урок
         </button>
       </div>
+
+      <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
 
       <DataTable
         data={lessons}

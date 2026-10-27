@@ -14,9 +14,10 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { ExamItem, ExamSpecification } from '../../types';
-import { mockDb } from '../../repositories/mockDatabase';
 import { adminService } from '../../services/adminService';
+import { ActionResultNotice, failureResult, type ActionResult } from '../ui/ConnectionNotice';
 import { FullscreenExamPreview } from './FullscreenExamPreview';
+import { subjectNameRu } from '../../constants/subjects';
 
 interface ExamBuilderProps {
   initialExam?: ExamItem;
@@ -24,28 +25,58 @@ interface ExamBuilderProps {
   onCancel: () => void;
 }
 
-export const ExamBuilder: React.FC<ExamBuilderProps> = ({ initialExam, onSave, onCancel }) => {
+/**
+ * The builder needs at least one specification version, and those come from the server.
+ * Without them nothing can be built, so the screen says so instead of inventing a specification.
+ */
+export const ExamBuilder: React.FC<ExamBuilderProps> = (props) => {
+  const specs = adminService.getExamSpecifications();
+  if (specs.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-3 pb-4 border-b border-[#E2DED5]">
+          <button onClick={props.onCancel} className="p-1.5 rounded-md hover:bg-[#EBE8E0] text-[#78716C] cursor-pointer">
+            <ArrowLeft className="w-5 h-5 text-[#171717]" />
+          </button>
+          <h1 className="text-lg font-bold text-[#171717]">Конструктор экзамена</h1>
+        </div>
+        <div className="bg-white rounded-xl border border-[#E2DED5] p-8 text-center text-xs text-[#78716C] leading-relaxed">
+          Конструктор недоступен: версии экзаменационной спецификации загружаются с сервера администрирования, который
+          ещё не подключён. Спецификация не задаётся здесь вручную.
+        </div>
+      </div>
+    );
+  }
+  return <ExamBuilderForm {...props} specs={specs} />;
+};
+
+interface ExamBuilderFormProps extends ExamBuilderProps {
+  specs: ExamSpecification[];
+}
+
+const ExamBuilderForm: React.FC<ExamBuilderFormProps> = ({ initialExam, onSave, onCancel, specs }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [fullscreenPreviewOpen, setFullscreenPreviewOpen] = useState(false);
 
-  // Specifications
-  const specs = mockDb.examSpecifications;
+  // Specification version (from the server)
   const [selectedSpecId, setSelectedSpecId] = useState(initialExam?.specificationId || specs[0].id);
   const activeSpec = specs.find((s) => s.id === selectedSpecId) || specs[0];
 
-  // Metadata
-  const [titleRu, setTitleRu] = useState(initialExam?.titleRu || 'Официальный пробный тест ЕНТ 2026');
-  const [titleKz, setTitleKz] = useState(initialExam?.titleKz || 'ҰБТ 2026 ресми байқау сынағы');
+  // Metadata: empty until the author fills them in
+  const [titleRu, setTitleRu] = useState(initialExam?.titleRu || '');
+  const [titleKz, setTitleKz] = useState(initialExam?.titleKz || '');
   const [examType, setExamType] = useState<ExamItem['type']>(initialExam?.type || 'official_mock');
   const [durationMinutes, setDurationMinutes] = useState(initialExam?.durationMinutes || activeSpec.durationMinutes);
-  const [passingScore, setPassingScore] = useState(initialExam?.passingScore || 50);
+  // The passing score is part of the scale and has no default: the author sets it, and saving needs it.
+  const [passingScore, setPassingScore] = useState<number | null>(initialExam?.passingScore ?? null);
+  const [result, setResult] = useState<ActionResult | null>(null);
 
   // Subject selection & Profile pair
   const [profilePairIndex, setProfilePairIndex] = useState(0);
   const activeProfileConfig = activeSpec.profileSubjectConfigs[profilePairIndex];
 
   // Question IDs
-  const allVerifiedQuestions = mockDb.questions.filter((q) => q.status === 'published' || q.status === 'approved');
+  const allVerifiedQuestions = adminService.getQuestions().filter((q) => q.status === 'published' || q.status === 'approved');
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>(
     initialExam?.questionIds || allVerifiedQuestions.map((q) => q.id)
   );
@@ -62,44 +93,49 @@ export const ExamBuilder: React.FC<ExamBuilderProps> = ({ initialExam, onSave, o
     setSelectedQuestionIds(allVerifiedQuestions.map((q) => q.id));
   };
 
-  const buildExamObject = (status: ExamItem['status']): ExamItem => {
+  const buildExamObject = (status: ExamItem['status'], score: number): ExamItem => {
     return {
       id: initialExam?.id || `ex-${Date.now().toString(36)}`,
       titleRu,
       titleKz,
       specificationId: selectedSpecId,
-      year: 2026,
+      year: activeSpec.year,
       version: (initialExam?.version || 0) + 1,
       type: examType,
-      questionCount: selectedQuestionIds.length > 0 ? selectedQuestionIds.length : activeSpec.totalQuestions,
+      // The number of questions is what the author selected, never the specification's target.
+      questionCount: selectedQuestionIds.length,
       maxScore: activeSpec.maxScore,
       durationMinutes,
       status,
       selectedSubjectIds: [
-        'history_kz',
-        'math_lit',
-        'reading_lit',
+        ...activeSpec.mandatorySubjectConfigs.map((config) => config.subjectId),
         activeProfileConfig.subject1Id,
         activeProfileConfig.subject2Id,
       ],
       questionIds: selectedQuestionIds,
-      passingScore,
+      passingScore: score,
       attemptsCount: initialExam?.attemptsCount || 0,
       publishedAt: status === 'published' ? new Date().toISOString() : initialExam?.publishedAt,
     };
   };
 
-  const handlePublish = () => {
-    const exam = buildExamObject('published');
-    adminService.saveExam(exam);
-    onSave(exam);
+  const saveExam = (status: ExamItem['status']) => {
+    if (passingScore === null) {
+      setResult({ tone: 'error', text: 'Экзамен не сохранён: задайте пороговый балл на шаге «Шкала оценивания».' });
+      return;
+    }
+    const exam = buildExamObject(status, passingScore);
+    try {
+      adminService.saveExam(exam);
+      onSave(exam);
+    } catch (error) {
+      setResult(failureResult(error));
+    }
   };
 
-  const handleSaveDraft = () => {
-    const exam = buildExamObject('draft');
-    adminService.saveExam(exam);
-    onSave(exam);
-  };
+  const handlePublish = () => saveExam('published');
+
+  const handleSaveDraft = () => saveExam('draft');
 
   const steps = [
     { num: 1, label: 'Метаданные' },
@@ -113,6 +149,8 @@ export const ExamBuilder: React.FC<ExamBuilderProps> = ({ initialExam, onSave, o
 
   return (
     <div className="space-y-6">
+      <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
+
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[#E2DED5]">
         <div className="flex items-center gap-3">
@@ -312,18 +350,14 @@ export const ExamBuilder: React.FC<ExamBuilderProps> = ({ initialExam, onSave, o
             <div>
               <h3 className="text-xs font-semibold text-[#78716C] mb-2">3 обязательных предмета ЕНТ:</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                <div className="p-3 rounded-lg bg-[#FAF9F6] border border-[#E2DED5] text-xs">
-                  <div className="font-bold text-[#171717]">История Казахстана</div>
-                  <div className="text-[#78716C] mt-0.5">20 вопросов • 20 баллов</div>
-                </div>
-                <div className="p-3 rounded-lg bg-[#FAF9F6] border border-[#E2DED5] text-xs">
-                  <div className="font-bold text-[#171717]">Мат. грамотность</div>
-                  <div className="text-[#78716C] mt-0.5">10 вопросов • 10 баллов</div>
-                </div>
-                <div className="p-3 rounded-lg bg-[#FAF9F6] border border-[#E2DED5] text-xs">
-                  <div className="font-bold text-[#171717]">Грамотность чтения</div>
-                  <div className="text-[#78716C] mt-0.5">10 вопросов • 10 баллов</div>
-                </div>
+                {activeSpec.mandatorySubjectConfigs.map((cfg) => (
+                  <div key={cfg.subjectId} className="p-3 rounded-lg bg-[#FAF9F6] border border-[#E2DED5] text-xs">
+                    <div className="font-bold text-[#171717]">{subjectNameRu(cfg.subjectId)}</div>
+                    <div className="text-[#78716C] mt-0.5">
+                      {cfg.questionCount} вопросов • {cfg.questionCount * cfg.pointsPerQuestion} баллов
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -343,7 +377,7 @@ export const ExamBuilder: React.FC<ExamBuilderProps> = ({ initialExam, onSave, o
                     <div>
                       <div className="text-xs font-bold text-[#171717]">{cfg.profilePairName}</div>
                       <div className="text-[11px] text-[#78716C] mt-0.5">
-                        Предмет 1: {cfg.subject1Questions} вопросов • Предмет 2: {cfg.subject2Questions} вопросов (по 50 баллов каждый)
+                        Предмет 1: {cfg.subject1Questions} вопросов • Предмет 2: {cfg.subject2Questions} вопросов
                       </div>
                     </div>
                     {profilePairIndex === idx && <Check className="w-4 h-4 text-[#FF5A36]" />}
@@ -420,15 +454,11 @@ export const ExamBuilder: React.FC<ExamBuilderProps> = ({ initialExam, onSave, o
               <div className="p-4 bg-[#FAF9F6] border border-[#E2DED5] rounded-lg space-y-2 text-xs">
                 <div className="flex justify-between">
                   <span className="text-[#78716C]">Максимальный суммарный балл:</span>
-                  <span className="font-bold text-[#171717]">140 баллов</span>
+                  <span className="font-bold text-[#171717]">{activeSpec.maxScore} баллов</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#78716C]">Пороговый балл для сдачи:</span>
-                  <span className="font-bold text-[#258568]">{passingScore} баллов</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[#78716C]">Для поступления на грант (ориентир):</span>
-                  <span className="font-bold text-[#FF5A36]">100+ баллов</span>
+                  <span className="font-bold text-[#258568]">{passingScore !== null ? `${passingScore} баллов` : 'не задан'}</span>
                 </div>
               </div>
 
@@ -440,8 +470,8 @@ export const ExamBuilder: React.FC<ExamBuilderProps> = ({ initialExam, onSave, o
                   type="number"
                   min={30}
                   max={100}
-                  value={passingScore}
-                  onChange={(e) => setPassingScore(Number(e.target.value))}
+                  value={passingScore ?? ''}
+                  onChange={(e) => setPassingScore(e.target.value === '' ? null : Number(e.target.value))}
                   className="w-full text-xs px-3 py-2 bg-white border border-[#E2DED5] rounded-md font-bold"
                 />
               </div>
@@ -455,12 +485,10 @@ export const ExamBuilder: React.FC<ExamBuilderProps> = ({ initialExam, onSave, o
             <h2 className="text-sm font-bold text-[#171717] uppercase tracking-wider">
               Шаг 6: Валидация и предпросмотр
             </h2>
-            <div className="p-4 rounded-xl bg-[#EBF7F2] border border-[#258568]/30 space-y-2 text-xs text-[#1D6A53]">
-              <div className="flex items-center gap-2 font-bold text-sm">
-                <CheckCircle2 className="w-4 h-4" /> Готовность спецификации подтверждена
-              </div>
+            <div className="p-4 rounded-xl bg-[#FAF9F6] border border-[#E2DED5] space-y-2 text-xs text-[#5C574F]">
+              <div className="flex items-center gap-2 font-bold text-sm text-[#171717]">Проверка перед публикацией</div>
               <p>
-                Все выбранные вопросы верифицированы, соответствуют стандарту ЕНТ 2026/2027 и готовы к публикации для тестирования учащихся.
+                Соответствие варианта спецификации проверяется на сервере при публикации. Здесь проверка не выполняется.
               </p>
             </div>
 
@@ -531,10 +559,10 @@ export const ExamBuilder: React.FC<ExamBuilderProps> = ({ initialExam, onSave, o
         </div>
       </div>
 
-      {/* Fullscreen Preview overlay */}
+      {/* Fullscreen Preview overlay. The preview does not show the passing score, so an unset score is passed as 0. */}
       {fullscreenPreviewOpen && (
         <FullscreenExamPreview
-          exam={buildExamObject('draft')}
+          exam={buildExamObject('draft', passingScore ?? 0)}
           onClose={() => setFullscreenPreviewOpen(false)}
         />
       )}
