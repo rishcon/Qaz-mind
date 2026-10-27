@@ -16,10 +16,13 @@ const NOT_CONNECTED = 'Данные не загружены: сервер адм
 export const OverviewPage: React.FC<OverviewPageProps> = ({ onNavigate }) => {
   const [period, setPeriod] = useState<'today' | '7days' | '30days' | 'all'>('30days');
   const metrics = adminService.getOverviewMetrics(period);
-  const attentionTotal = metrics.requiresAttention.reduce<number | null>(
-    (sum, item) => (sum === null || item.count === null ? null : sum + item.count),
-    0
-  );
+  // Without the server the list is empty because nothing is loaded, so the total is unknown, not zero.
+  const attentionTotal = ADMIN_API_CONNECTED
+    ? metrics.requiresAttention.reduce<number | null>(
+        (sum, item) => (sum === null || item.count === null ? null : sum + item.count),
+        0
+      )
+    : null;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
