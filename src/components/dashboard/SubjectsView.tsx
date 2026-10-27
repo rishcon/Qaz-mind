@@ -1,32 +1,29 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Language } from '../../types';
 import { StudentProfile } from '../../types/dashboard';
 import { OFFICIAL_PROFILE_PAIRS } from '../../types/auth';
-import { ALL_SUBJECT_CURRICULA, SubjectContent } from '../../content/curriculumData';
+import { ApiCurriculum, ApiSubject, learningApi } from '../../api/endpoints';
+import { errorText } from '../../api/client';
 import {
   ArrowRight,
-  BookOpen,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
-  Clock,
-  Lock,
   Play,
-  Layers,
 } from 'lucide-react';
 
 interface SubjectsViewProps {
   currentLang: Language;
   profile: StudentProfile;
-  completedLessonIds: string[];
-  onNavigateToLesson: (lessonId: string, subjectId: string) => void;
+  onNavigateToLesson: (lessonSlug: string, subjectId: string) => void;
   onNavigateToPractice: (subjectId: string) => void;
 }
+
+const MANDATORY_IDS = ['history_kz', 'math_lit', 'reading_lit'];
 
 export const SubjectsView: React.FC<SubjectsViewProps> = ({
   currentLang,
   profile,
-  completedLessonIds,
   onNavigateToLesson,
   onNavigateToPractice,
 }) => {
@@ -34,22 +31,44 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
   const currentPair = OFFICIAL_PROFILE_PAIRS.find((p) => p.id === profile.profilePairId) || OFFICIAL_PROFILE_PAIRS[0];
 
   // The 5 active subjects for this student
-  const activeSubjectIds = [
-    'history_kz',
-    'math_lit',
-    'reading_lit',
-    currentPair.subjectIds[0],
-    currentPair.subjectIds[1],
-  ];
+  const activeSubjectIds = [...MANDATORY_IDS, currentPair.subjectIds[0], currentPair.subjectIds[1]];
 
+  const [subjects, setSubjects] = useState<ApiSubject[] | null>(null);
+  const [subjectsError, setSubjectsError] = useState('');
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('history_kz');
-  const [openChapterId, setOpenChapterId] = useState<string>('');
+  const [curriculum, setCurriculum] = useState<ApiCurriculum | null>(null);
+  const [curriculumError, setCurriculumError] = useState('');
+  const [openChapterSlug, setOpenChapterSlug] = useState<string>('');
 
-  const currentSubjectCurriculum: SubjectContent =
-    ALL_SUBJECT_CURRICULA[selectedSubjectId] || ALL_SUBJECT_CURRICULA['history_kz'];
+  useEffect(() => {
+    learningApi
+      .listSubjects()
+      .then(setSubjects)
+      .catch((err) => setSubjectsError(errorText(err)));
+  }, []);
 
-  const toggleChapter = (chapterId: string) => {
-    setOpenChapterId((prev) => (prev === chapterId ? '' : chapterId));
+  // Progress is read from the server on every visit, so a finished lesson shows up after a reload.
+  useEffect(() => {
+    let cancelled = false;
+    setCurriculum(null);
+    setCurriculumError('');
+    learningApi
+      .curriculum(selectedSubjectId)
+      .then((data) => {
+        if (!cancelled) setCurriculum(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setCurriculumError(errorText(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSubjectId]);
+
+  const shownSubjects = (subjects ?? []).filter((s) => activeSubjectIds.includes(s.id));
+  const selectedSubject = subjects?.find((s) => s.id === selectedSubjectId);
+  const toggleChapter = (slug: string) => {
+    setOpenChapterSlug((prev) => (prev === slug ? '' : slug));
   };
 
   return (
@@ -64,30 +83,27 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
         </p>
       </div>
 
+      {subjectsError && (
+        <div className="p-4 bg-red-50 border border-red-200 text-red-700 text-xs rounded">{subjectsError}</div>
+      )}
+
       {/* 5 Subjects Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-        {activeSubjectIds.map((subId) => {
-          const sub = ALL_SUBJECT_CURRICULA[subId] || {
-            id: subId,
-            code: '00',
-            nameRu: subId,
-            nameKz: subId,
-            category: 'profile',
-            totalQuestions: 1000,
-            totalTopics: 30,
-            chapters: [],
-          };
-
-          const isSelected = selectedSubjectId === subId;
-          const isMandatory = ['history_kz', 'math_lit', 'reading_lit'].includes(subId);
+        {subjects === null && !subjectsError &&
+          activeSubjectIds.map((subId) => (
+            <div key={subId} className="p-4 border border-[#E2DED5] bg-white rounded h-[92px] animate-pulse" />
+          ))}
+        {shownSubjects.map((sub) => {
+          const isSelected = selectedSubjectId === sub.id;
+          const isMandatory = MANDATORY_IDS.includes(sub.id);
 
           return (
             <button
-              key={subId}
+              key={sub.id}
               type="button"
               onClick={() => {
-                setSelectedSubjectId(subId);
-                setOpenChapterId('');
+                setSelectedSubjectId(sub.id);
+                setOpenChapterSlug('');
               }}
               className={`p-4 text-left border rounded transition-all cursor-pointer flex flex-col justify-between ${
                 isSelected
@@ -100,13 +116,13 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
                   <span>{isMandatory ? 'Обязательный' : 'Профильный'}</span>
                 </div>
                 <h3 className="font-bold text-sm text-[#171717] line-clamp-1">
-                  {currentLang === 'kz' ? sub.nameKz : sub.nameRu}
+                  {currentLang === 'kz' ? sub.title_kz : sub.title_ru}
                 </h3>
               </div>
 
               <div className="mt-3 pt-2.5 border-t border-[#E2DED5] flex items-center justify-between text-xs">
                 <span className="font-mono text-[11px] text-[#74736F]">
-                  {sub.totalTopics} тем
+                  {sub.published_lessons > 0 ? `Уроков: ${sub.published_lessons}` : 'Скоро'}
                 </span>
                 <span className={`text-xs font-bold ${isSelected ? 'text-[#FF5A36]' : 'text-[#171717]'}`}>
                   {isSelected ? 'Выбран' : 'Открыть'}
@@ -125,7 +141,9 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
               Учебная программа дисциплины
             </span>
             <h2 className="text-xl md:text-2xl font-extrabold text-[#171717] mt-0.5">
-              {currentLang === 'kz' ? currentSubjectCurriculum.nameKz : currentSubjectCurriculum.nameRu}
+              {selectedSubject
+                ? currentLang === 'kz' ? selectedSubject.title_kz : selectedSubject.title_ru
+                : '…'}
             </h2>
           </div>
 
@@ -139,25 +157,32 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
           </button>
         </div>
 
-        {/* Chapters list */}
-        {currentSubjectCurriculum.chapters.length > 0 ? (
+        {curriculumError && (
+          <div className="p-4 bg-red-50 border border-red-200 text-red-700 text-xs rounded">{curriculumError}</div>
+        )}
+
+        {!curriculumError && curriculum === null && (
+          <div className="p-8 text-center text-xs font-mono text-[#74736F]">Загрузка программы…</div>
+        )}
+
+        {curriculum && curriculum.topics.length > 0 && (
           <div className="space-y-4">
-            {currentSubjectCurriculum.chapters.map((chapter) => {
-              const isOpen = openChapterId === chapter.id || currentSubjectCurriculum.chapters.length === 1;
+            {curriculum.topics.map((topic) => {
+              const isOpen = openChapterSlug === topic.slug || curriculum.topics.length === 1;
 
               return (
-                <div key={chapter.id} className="border border-[#E2DED5] rounded overflow-hidden">
+                <div key={topic.slug} className="border border-[#E2DED5] rounded overflow-hidden">
                   <button
                     type="button"
-                    onClick={() => toggleChapter(chapter.id)}
+                    onClick={() => toggleChapter(topic.slug)}
                     className="w-full p-4 text-left bg-[#FAF8F5] hover:bg-[#F5F3EE] transition-colors flex items-center justify-between cursor-pointer"
                   >
                     <div>
                       <h3 className="font-bold text-sm text-[#171717]">
-                        {currentLang === 'kz' ? chapter.titleKz : chapter.titleRu}
+                        {currentLang === 'kz' ? topic.title_kz : topic.title_ru}
                       </h3>
                       <span className="text-xs font-mono text-[#74736F] mt-0.5 block">
-                        Уроков: {chapter.lessons.length}
+                        Уроков: {topic.lessons.length}
                       </span>
                     </div>
 
@@ -172,24 +197,22 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
 
                   {isOpen && (
                     <div className="divide-y divide-[#E2DED5] bg-white">
-                      {chapter.lessons.map((lesson) => {
-                        const isCompleted = completedLessonIds.includes(lesson.id);
+                      {topic.lessons.map((lesson, index) => {
+                        const isCompleted = lesson.progress.state === 'completed';
 
                         return (
                           <div
-                            key={lesson.id}
+                            key={lesson.slug}
                             className="p-4 flex items-center justify-between hover:bg-[#FAF8F5] transition-colors"
                           >
                             <div className="flex items-center gap-3 pr-4">
-                              <span className="font-mono text-xs text-[#74736F] font-bold w-6">
-                                {lesson.number}
-                              </span>
+                              <span className="font-mono text-xs text-[#74736F] font-bold w-6">{index + 1}</span>
                               <div>
                                 <h4 className="text-sm font-semibold text-[#171717]">
-                                  {currentLang === 'kz' ? lesson.titleKz : lesson.titleRu}
+                                  {currentLang === 'kz' ? lesson.title_kz : lesson.title_ru}
                                 </h4>
                                 <span className="text-[11px] font-mono text-[#74736F] mt-0.5 block">
-                                  {lesson.duration}
+                                  {lesson.estimated_minutes} мин
                                 </span>
                               </div>
                             </div>
@@ -204,7 +227,7 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
 
                               <button
                                 type="button"
-                                onClick={() => onNavigateToLesson(lesson.id, selectedSubjectId)}
+                                onClick={() => onNavigateToLesson(lesson.slug, selectedSubjectId)}
                                 className="px-3 py-1.5 bg-[#171717] hover:bg-[#FF5A36] text-white font-mono text-xs font-bold transition-colors cursor-pointer rounded-xs flex items-center gap-1"
                               >
                                 <span>{isCompleted ? 'Повторить' : 'Открыть'}</span>
@@ -220,7 +243,9 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
               );
             })}
           </div>
-        ) : (
+        )}
+
+        {curriculum && curriculum.topics.length === 0 && (
           <div className="p-8 text-center bg-[#FAF8F5] border border-[#E2DED5] rounded text-xs text-[#74736F]">
             Учебные материалы по выбранному предмету готовятся методистами.
           </div>

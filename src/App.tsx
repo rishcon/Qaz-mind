@@ -18,7 +18,7 @@ import {
 import { schoolService } from './services/schoolService';
 import { DEMO_MODE } from './config';
 import { useAuth } from './auth/AuthProvider';
-import { authApi, MeResponse, OnboardingPayload, profileApi, ProfilePatch } from './api/endpoints';
+import { authApi, learningApi, MeResponse, OnboardingPayload, profileApi, ProfilePatch } from './api/endpoints';
 import { toProfilePatch, toStudentProfile } from './api/mappers';
 import { UnavailablePage } from './components/common/UnavailablePage';
 import { ResetPasswordPage } from './components/auth/ResetPasswordPage';
@@ -173,9 +173,8 @@ export default function App() {
   })();
 
   // Learning Progress State
-  const [completedLessonIds, setCompletedLessonIds] = useState<string[]>(() =>
-    readLocal<string[]>('completed_lessons', [])
-  );
+  // Completed lessons come from the server (GET /me/progress); see the effect below.
+  const [completedLessonIds, setCompletedLessonIds] = useState<string[]>([]);
 
   const [examHistory, setExamHistory] = useState<ExamHistoryRecord[]>(() =>
     readLocal<ExamHistoryRecord[]>('exam_history', [])
@@ -191,7 +190,7 @@ export default function App() {
   const [dailyTasks, setDailyTasks] = useState<DailyTask[]>(initialDailyTasks);
 
   // Active Focus Mode parameters
-  const [activeLessonId, setActiveLessonId] = useState<string>('lesson-khanate-foundation');
+  const [activeLessonSlug, setActiveLessonSlug] = useState<string>('khanate-foundation');
   const [activeSubjectId, setActiveSubjectId] = useState<string>('history_kz');
   const [activePracticeCount, setActivePracticeCount] = useState<number>(5);
   const [activeMistakeReviewItem, setActiveMistakeReviewItem] = useState<MistakeItem | null>(null);
@@ -282,7 +281,13 @@ export default function App() {
   }, []);
 
   // Sync profile & storage changes
-  useEffect(() => writeLocal('completed_lessons', completedLessonIds), [completedLessonIds]);
+  useEffect(() => {
+    if (!auth.user) return;
+    learningApi
+      .myProgress()
+      .then((records) => setCompletedLessonIds(records.filter((r) => r.state === 'completed').map((r) => r.lesson_slug)))
+      .catch(() => setCompletedLessonIds([]));
+  }, [auth.user?.id]);
   useEffect(() => writeLocal('exam_history', examHistory), [examHistory]);
   useEffect(() => writeLocal('practiced_count', practicedCount), [practicedCount]);
   useEffect(() => writeLocal('mistakes', mistakesList), [mistakesList]);
@@ -364,17 +369,18 @@ export default function App() {
 
   // Handler: Start Lesson in Focus Mode (Layout C)
   // Personal flows must not inherit a school assignment left over from an earlier, exited session.
-  const handleStartLesson = (lessonId: string, subjectId: string) => {
+  const handleStartLesson = (lessonSlug: string, subjectId: string) => {
     setActiveSchoolAssignment(null);
-    setActiveLessonId(lessonId);
+    setActiveLessonSlug(lessonSlug);
     setActiveSubjectId(subjectId);
-    navigateTo('focus_lesson', `/learn/${subjectId}/${lessonId}`);
+    navigateTo('focus_lesson', `/learn/${subjectId}/${lessonSlug}`);
   };
 
   // Handler: Complete Lesson
-  const handleCompleteLesson = (lessonId: string) => {
-    if (!completedLessonIds.includes(lessonId)) {
-      setCompletedLessonIds((prev) => [...prev, lessonId]);
+  // The reader has already stored the completion on the server; this only updates the local list.
+  const handleCompleteLesson = (lessonSlug: string) => {
+    if (!completedLessonIds.includes(lessonSlug)) {
+      setCompletedLessonIds((prev) => [...prev, lessonSlug]);
     }
 
     // If attempting a school assignment lesson, record result
@@ -524,7 +530,7 @@ export default function App() {
     setActiveSchoolAssignment(asg);
 
     if (asg.activityType === 'lesson') {
-      setActiveLessonId(asg.lessonId || 'lesson-khanate-foundation');
+      setActiveLessonSlug(asg.lessonId || 'khanate-foundation');
       setActiveSubjectId(asg.subjectId);
       navigateTo('focus_lesson', `/learn/${asg.subjectId}/${asg.lessonId || 'lesson'}`);
     } else if (asg.activityType === 'mock_exam') {
@@ -837,8 +843,7 @@ export default function App() {
   if (currentRoute === 'focus_lesson') {
     return (
       <FocusLessonReader
-        lessonId={activeLessonId}
-        subjectId={activeSubjectId}
+        lessonSlug={activeLessonSlug}
         currentLang={currentLang}
         onComplete={handleCompleteLesson}
         onExit={() => {
@@ -967,7 +972,6 @@ export default function App() {
           <SubjectsView
             currentLang={currentLang}
             profile={profile}
-            completedLessonIds={completedLessonIds}
             onNavigateToLesson={handleStartLesson}
             onNavigateToPractice={(subId) => handleStartPractice(subId, 5)}
           />
@@ -1008,7 +1012,7 @@ export default function App() {
             practicedCount={practicedCount}
             onStartLearning={() => {
               setDashboardView('today');
-              handleStartLesson('lesson-khanate-foundation', 'history_kz');
+              handleStartLesson('khanate-foundation', 'history_kz');
             }}
           />
         )}

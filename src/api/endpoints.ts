@@ -84,3 +84,84 @@ export const profileApi = {
   updateProfile: (patch: ProfilePatch) => apiRequest<ApiProfile>('PATCH', '/me/profile', patch),
   listProfilePairs: () => apiRequest<ApiProfilePair[]>('GET', '/catalog/profile-pairs'),
 };
+
+// ----- curriculum and lessons (stage 4) --------------------------------------------------------
+
+export type LessonProgressState = 'not_started' | 'in_progress' | 'completed';
+
+export interface ApiLessonProgress {
+  state: LessonProgressState;
+  last_step: number;
+  completed_at: string | null;
+}
+
+export interface ApiSubject {
+  id: string;
+  code: string;
+  title_ru: string;
+  title_kz: string;
+  category: 'mandatory' | 'profile';
+  /** Lessons with a published version. Zero means the material is not ready. */
+  published_lessons: number;
+}
+
+export interface ApiCurriculum {
+  subject: ApiSubject;
+  topics: {
+    slug: string;
+    title_ru: string;
+    title_kz: string;
+    lessons: {
+      slug: string;
+      title_ru: string;
+      title_kz: string;
+      estimated_minutes: number;
+      progress: ApiLessonProgress;
+    }[];
+  }[];
+}
+
+export interface ApiLessonStep {
+  index: number;
+  heading_ru: string;
+  heading_kz: string;
+  body_ru: string;
+  body_kz: string;
+  key_fact_ru: string | null;
+  key_fact_kz: string | null;
+  example_ru: string | null;
+  example_kz: string | null;
+}
+
+export interface ApiLesson {
+  slug: string;
+  subject_id: string;
+  topic_slug: string;
+  title_ru: string;
+  title_kz: string;
+  estimated_minutes: number;
+  source_reference: string;
+  version: number;
+  steps: ApiLessonStep[];
+  progress: ApiLessonProgress;
+}
+
+export interface ApiProgressRecord {
+  lesson_slug: string;
+  state: LessonProgressState;
+  last_step: number;
+  completed_at: string | null;
+}
+
+export const learningApi = {
+  listSubjects: () => apiRequest<ApiSubject[]>('GET', '/subjects'),
+  curriculum: (subjectId: string) =>
+    apiRequest<ApiCurriculum>('GET', `/subjects/${encodeURIComponent(subjectId)}/curriculum`),
+  lesson: (slug: string) => apiRequest<ApiLesson>('GET', `/lessons/${encodeURIComponent(slug)}`),
+  saveProgress: (slug: string, lastStep: number, completed: boolean) =>
+    apiRequest<ApiProgressRecord>('PUT', `/me/lessons/${encodeURIComponent(slug)}/progress`, {
+      last_step: lastStep,
+      completed,
+    }),
+  myProgress: () => apiRequest<ApiProgressRecord[]>('GET', '/me/progress'),
+};

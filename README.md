@@ -2,7 +2,7 @@
 
 Платформа подготовки к ЕНТ / ҰБТ. Фронтенд на React 19 + Vite, API на FastAPI + PostgreSQL.
 
-Статус: **этапы 0–3 выполнены** (аудит, backend, аккаунты и сессии, онбординг и профиль). Учебный контент, практика, школы и пробники ещё не подключены к серверу. Подробнее — `docs/TECHNICAL_CHECKLIST.md`.
+Статус: **этапы 0–4 выполнены** (аудит, backend, аккаунты и сессии, онбординг и профиль, учебный контент и прогресс уроков). Практика, школы и пробники ещё не подключены к серверу. Опубликованного контента пока нет: ожидается проверка методистом. Подробнее — `docs/TECHNICAL_CHECKLIST.md`.
 
 ## Структура
 
@@ -53,6 +53,21 @@ docker compose exec -T db psql -U qazmind -d qazmind -c "CREATE DATABASE qazmind
 docker compose exec -T -e TEST_DATABASE_URL=postgresql+asyncpg://qazmind:qazmind@db:5432/qazmind_test api pytest -q
 ```
 Порт 55432 выбран специально: 5432 часто занят локальным PostgreSQL на машине разработчика.
+
+## Учебный контент
+
+Уроки загружаются файлом и публикуются только после проверки другим человеком:
+
+```bash
+cd backend
+python -m app.content.cli import content/drafts/history_kz.json     # статус draft, ученики не видят
+python -m app.content.cli status
+python -m app.content.cli transition khanate-foundation 1 submit  --by "Автор"
+python -m app.content.cli transition khanate-foundation 1 approve --by "Ревьюер"   # не автор
+python -m app.content.cli transition khanate-foundation 1 publish --by "Ревьюер"
+```
+
+Файлы в `backend/content/drafts/` — непроверенные ИИ-черновики из прототипа. Их нельзя публиковать без сверки с учебником.
 
 ## Тесты
 

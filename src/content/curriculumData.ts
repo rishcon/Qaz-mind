@@ -1,3 +1,6 @@
+// PROTOTYPE CONTENT. Not used by the student screens: lessons come from the server (see backend/content).
+// Kept as the source for scripts/export-prototype-lessons.ts. Counts of questions or topics are not stored here:
+// nothing invented is shown to students.
 import { SyllabusChapter } from '../types/dashboard';
 
 export interface SubjectContent {
@@ -6,8 +9,6 @@ export interface SubjectContent {
   nameRu: string;
   nameKz: string;
   category: 'mandatory' | 'profile';
-  totalQuestions: number;
-  totalTopics: number;
   chapters: SyllabusChapter[];
 }
 
@@ -18,8 +19,6 @@ export const ALL_SUBJECT_CURRICULA: Record<string, SubjectContent> = {
     nameRu: 'История Казахстана',
     nameKz: 'Қазақстан тарихы',
     category: 'mandatory',
-    totalQuestions: 1420,
-    totalTopics: 48,
     chapters: [
       {
         id: 'ch-ancient',
@@ -67,8 +66,6 @@ export const ALL_SUBJECT_CURRICULA: Record<string, SubjectContent> = {
     nameRu: 'Математическая грамотность',
     nameKz: 'Математикалық сауаттылық',
     category: 'mandatory',
-    totalQuestions: 1180,
-    totalTopics: 36,
     chapters: [
       {
         id: 'ch-mathlit-percents',
@@ -102,8 +99,6 @@ export const ALL_SUBJECT_CURRICULA: Record<string, SubjectContent> = {
     nameRu: 'Грамотность чтения',
     nameKz: 'Оқу сауаттылығы',
     category: 'mandatory',
-    totalQuestions: 890,
-    totalTopics: 24,
     chapters: [
       {
         id: 'ch-read-core',
@@ -125,8 +120,6 @@ export const ALL_SUBJECT_CURRICULA: Record<string, SubjectContent> = {
     nameRu: 'Математика (профильная)',
     nameKz: 'Математика (бейіндік)',
     category: 'profile',
-    totalQuestions: 2200,
-    totalTopics: 64,
     chapters: [
       {
         id: 'ch-mp-trig',
@@ -160,8 +153,6 @@ export const ALL_SUBJECT_CURRICULA: Record<string, SubjectContent> = {
     nameRu: 'Физика',
     nameKz: 'Физика',
     category: 'profile',
-    totalQuestions: 1650,
-    totalTopics: 52,
     chapters: [
       {
         id: 'ch-phys-mech',
@@ -195,8 +186,6 @@ export const ALL_SUBJECT_CURRICULA: Record<string, SubjectContent> = {
     nameRu: 'Биология',
     nameKz: 'Биология',
     category: 'profile',
-    totalQuestions: 1540,
-    totalTopics: 46,
     chapters: [
       {
         id: 'ch-bio-cell',
@@ -230,8 +219,6 @@ export const ALL_SUBJECT_CURRICULA: Record<string, SubjectContent> = {
     nameRu: 'Химия',
     nameKz: 'Химия',
     category: 'profile',
-    totalQuestions: 1200,
-    totalTopics: 44,
     chapters: [
       {
         id: 'ch-chem-inorg',
@@ -265,8 +252,6 @@ export const ALL_SUBJECT_CURRICULA: Record<string, SubjectContent> = {
     nameRu: 'География',
     nameKz: 'География',
     category: 'profile',
-    totalQuestions: 980,
-    totalTopics: 38,
     chapters: [
       {
         id: 'ch-geo-kz',
@@ -288,8 +273,6 @@ export const ALL_SUBJECT_CURRICULA: Record<string, SubjectContent> = {
     nameRu: 'Всемирная история',
     nameKz: 'Дүниежүзі тарихы',
     category: 'profile',
-    totalQuestions: 1100,
-    totalTopics: 42,
     chapters: [
       {
         id: 'ch-wh-modern',
