@@ -64,7 +64,7 @@ server {
     ssl_certificate     /etc/letsencrypt/live/admin.qazmind.asia/fullchain.pem;  # example path
     ssl_certificate_key /etc/letsencrypt/live/admin.qazmind.asia/privkey.pem;    # example path
 
-    root /var/www/qazmind/admin;           # output of `npm run build:admin` without VITE_ADMIN_DEMO_MODE
+    root /var/www/qazmind/admin;           # output of `npm run build:admin`
     index index.html;
     client_max_body_size 2m;
 
