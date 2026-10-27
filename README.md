@@ -45,7 +45,14 @@ docs/                техническое задание, аудит этап�
    ```
 3. Письма в режиме разработки **не отправляются**: ссылки подтверждения и восстановления пишутся в лог сервера (строки `DEV MAIL`).
 
-Вариант через Docker: `docker compose up -d db api`, затем миграции внутри контейнера `docker compose exec api alembic upgrade head`.
+Вариант через Docker (проверено):
+```bash
+docker compose up -d --build                       # PostgreSQL 16 на localhost:55432, API на localhost:8000
+docker compose exec api alembic upgrade head       # миграции
+docker compose exec -T db psql -U qazmind -d qazmind -c "CREATE DATABASE qazmind_test;"
+docker compose exec -T -e TEST_DATABASE_URL=postgresql+asyncpg://qazmind:qazmind@db:5432/qazmind_test api pytest -q
+```
+Порт 55432 выбран специально: 5432 часто занят локальным PostgreSQL на машине разработчика.
 
 ## Тесты
 

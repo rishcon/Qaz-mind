@@ -1,6 +1,7 @@
 # Local development stack: PostgreSQL + API.
 # Frontend runs on the host with `npm run dev` (Vite proxies /api to localhost:8000).
 # Credentials below are for local use only and must not be reused anywhere else.
+# Host port 55432 is used on purpose: 5432 is often taken by a PostgreSQL installed on the developer machine.
 
 services:
   db:
@@ -10,7 +11,7 @@ services:
       POSTGRES_PASSWORD: qazmind
       POSTGRES_DB: qazmind
     ports:
-      - "5432:5432"
+      - "55432:5432"
     volumes:
       - qazmind-db:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +21,11 @@ services:
       retries: 20
 
   api:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        # Dev extras (pytest, httpx) are installed for local test runs only.
+        INSTALL_DEV: "1"
     depends_on:
       db:
         condition: service_healthy
