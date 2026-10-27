@@ -45,13 +45,17 @@ def test_burn_password_time_never_raises():
 
 
 def test_production_refuses_the_local_mailer():
-    settings = Settings(app_env="production", database_url="postgresql+asyncpg://x@localhost/x", cookie_secure=True)
+    settings = Settings(
+        app_env="production", database_url="postgresql+asyncpg://x@localhost/x", cookie_secure=True, mail_mode="dev_log"
+    )
     with pytest.raises(RuntimeError, match="local-only"):
         create_app(settings)
 
 
 def test_production_requires_secure_cookies():
-    settings = Settings(app_env="staging", database_url="postgresql+asyncpg://x@localhost/x", cookie_secure=False)
+    settings = Settings(
+        app_env="staging", database_url="postgresql+asyncpg://x@localhost/x", cookie_secure=False, mail_mode="smtp", smtp_host="mail.example"
+    )
     with pytest.raises(RuntimeError):
         settings.validate_for_environment()
 

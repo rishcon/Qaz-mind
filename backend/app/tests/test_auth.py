@@ -32,11 +32,21 @@ async def test_register_sends_one_verification_mail_and_hides_existing_accounts(
     assert response.json() == {"status": "check_email"}
     assert len(harness.mailer.messages_to(EMAIL, "подтвердите email")) == 1
 
-    # Same address in other case: identical answer, no second account, no second verification mail.
+    # Same address in other case, account not verified yet: identical answer, no second account,
+    # and no second verification mail inside the cooldown.
     again = await api_post(harness.http, "/api/v1/auth/register", {"name": NAME, "email": EMAIL, "password": PASSWORD})
     assert again.status_code == 202
     assert again.json() == {"status": "check_email"}
     assert len(harness.mailer.messages_to(EMAIL, "подтвердите email")) == 1
+    assert harness.mailer.messages_to(EMAIL, "повторной регистрации") == []
+
+    # Once the address is verified, a new registration attempt tells the owner the account exists.
+    token = harness.mailer.token_for(EMAIL, "подтвердите email")
+    assert (await api_post(harness.http, "/api/v1/auth/verify-email", {"token": token})).status_code == 200
+    await api_post(harness.http, "/api/v1/auth/logout")
+    verified_again = await api_post(harness.http, "/api/v1/auth/register", {"name": NAME, "email": EMAIL, "password": PASSWORD})
+    assert verified_again.status_code == 202
+    assert verified_again.json() == {"status": "check_email"}
     assert len(harness.mailer.messages_to(EMAIL, "повторной регистрации")) == 1
 
 

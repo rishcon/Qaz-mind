@@ -1,4 +1,4 @@
-# Local development stack: PostgreSQL + API.
+# Local development stack: PostgreSQL, API and Mailpit (local mail catcher).
 # Frontend runs on the host with `npm run dev` (Vite proxies /api to localhost:8000).
 # Credentials below are for local use only and must not be reused anywhere else.
 # Host port 55432 is used on purpose: 5432 is often taken by a PostgreSQL installed on the developer machine.
@@ -29,15 +29,29 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     environment:
       APP_ENV: local
       DATABASE_URL: postgresql+asyncpg://qazmind:qazmind@db:5432/qazmind
       PUBLIC_APP_URL: http://localhost:3000
       API_CORS_ORIGINS: '["http://localhost:3000"]'
       COOKIE_SECURE: "false"
-      MAIL_MODE: dev_log
+      # Emails go to Mailpit (web UI: http://localhost:8025). Nothing leaves the machine.
+      MAIL_MODE: smtp
+      MAIL_FROM: "QazMind <noreply@qazmind.local>"
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_STARTTLS: "false"
     ports:
       - "8000:8000"
+
+  mailpit:
+    # Local mail catcher: receives every email the API sends and shows it in a web UI.
+    image: axllent/mailpit:v1.32.0
+    ports:
+      - "8025:8025"   # web UI and API
+      - "1025:1025"   # SMTP (for a backend started on the host)
 
 volumes:
   qazmind-db:

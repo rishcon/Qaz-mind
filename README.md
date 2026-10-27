@@ -43,7 +43,7 @@ docs/                техническое задание, аудит этап�
    alembic upgrade head
    uvicorn app.main:app --reload --port 8000
    ```
-3. Письма в режиме разработки **не отправляются**: ссылки подтверждения и восстановления пишутся в лог сервера (строки `DEV MAIL`).
+3. Письма уходят в **Mailpit** (см. раздел «Почта в разработке» ниже).
 
 Вариант через Docker (проверено):
 ```bash
@@ -53,6 +53,19 @@ docker compose exec -T db psql -U qazmind -d qazmind -c "CREATE DATABASE qazmind
 docker compose exec -T -e TEST_DATABASE_URL=postgresql+asyncpg://qazmind:qazmind@db:5432/qazmind_test api pytest -q
 ```
 Порт 55432 выбран специально: 5432 часто занят локальным PostgreSQL на машине разработчика.
+
+## Почта в разработке (Mailpit)
+
+Все письма приложения (подтверждение email, восстановление пароля) уходят в Mailpit и не покидают вашу машину.
+
+1. Запустите стек: `docker compose up -d`.
+2. Откройте **http://localhost:8025**. Здесь видны все письма, их можно открыть, искать и удалить.
+3. Зарегистрируйтесь на сайте, письмо появится в Mailpit: откройте его и нажмите ссылку «открыть ссылку» (или скопируйте адрес `http://localhost:3000/verify-email?token=...`). Ссылка действует 24 часа.
+4. Если письма не видно, проверьте, что Mailpit запущен: `docker compose ps`.
+
+Ссылки ведут на `localhost`, поэтому открывать их нужно на этом же компьютере.
+
+Для настоящей почты (Gmail, Resend и т. д.) задайте `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_STARTTLS=true` в `backend/.env`. Пароли не коммитьте.
 
 ## Учебный контент
 
@@ -92,13 +105,14 @@ TEST_DATABASE_URL=postgresql+asyncpg://qazmind:qazmind@localhost:5432/qazmind_te
 | backend | `PUBLIC_APP_URL` | адрес фронтенда для ссылок в письмах |
 | backend | `API_CORS_ORIGINS` | разрешённые origin (JSON-список) |
 | backend | `COOKIE_SECURE` | `true` за HTTPS (обязательно в staging/production) |
-| backend | `MAIL_MODE` | сейчас только `dev_log` (только для разработки) |
+| backend | `MAIL_MODE` | `smtp` (по умолчанию в compose, Mailpit) или `dev_log` (только для тестов) |
+| backend | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_STARTTLS`, `MAIL_FROM` | настройки SMTP-сервера |
 
 Секреты не коммитятся: `.env*` игнорируется, в репозитории только `.env.example`.
 
 ## Что ещё не готово
 
-- Письма не доставляются: нет почтового провайдера (открытое решение ТЗ п. 22.2).
+- Почтовый провайдер для настоящей рассылки не подключён (открытое решение ТЗ п. 22.2). Локально письма идут в Mailpit.
 - Учебный контент, прогресс уроков и практика пока в браузере; ключи ответов лежат в клиентском коде (этапы 4–5).
 - Школы, приглашения, задания и пробники — только прототип в `DEMO_MODE` (этапы 6–9).
 - Визуальные скриншоты для регрессии и E2E в браузере не сняты.

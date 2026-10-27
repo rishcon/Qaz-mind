@@ -1,6 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,9 +31,17 @@ class Settings(BaseSettings):
     login_max_failures: int = 5
     login_lock_minutes: int = 15
 
-    # "dev_log" writes emails to the server log and delivers nothing. Only for local development and tests.
-    # A real SMTP/transactional adapter is not implemented yet, so staging/production cannot start.
-    mail_mode: Literal["dev_log"] = "dev_log"
+    # "dev_log" writes emails to the server log and delivers nothing. Only for tests.
+    # "smtp" sends through any SMTP server: Mailpit locally (see docker-compose.yml), a provider later.
+    mail_mode: Literal["dev_log", "smtp"] = "dev_log"
+    mail_from: str = "QazMind <noreply@qazmind.local>"
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = None
+    # STARTTLS upgrades the connection before login. Mailpit does not support it, so it is off for local use.
+    smtp_starttls: bool = True
+    smtp_timeout_seconds: int = 10
 
     @property
     def is_production_like(self) -> bool:
@@ -42,11 +51,13 @@ class Settings(BaseSettings):
         if not self.is_production_like:
             return
         if self.mail_mode == "dev_log":
-            raise RuntimeError(
-                "MAIL_MODE=dev_log is local-only: no real email adapter is configured for this environment"
-            )
+            raise RuntimeError("MAIL_MODE=dev_log is local-only: staging and production must send real email")
         if not self.cookie_secure:
             raise RuntimeError("COOKIE_SECURE must be true in staging/production")
+
+    def validate_mail(self) -> None:
+        if self.mail_mode == "smtp" and not self.smtp_host:
+            raise RuntimeError("MAIL_MODE=smtp needs SMTP_HOST")
 
 
 @lru_cache

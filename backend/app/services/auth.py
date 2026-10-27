@@ -16,7 +16,7 @@ from app.core.security import (
 )
 from app.core.time import utcnow
 from app.models import AuthSession, AuthToken, User
-from app.services.mail import Mailer, OutgoingEmail
+from app.services.mail import MailDeliveryError, Mailer, OutgoingEmail
 
 INVALID_CREDENTIALS = "Неверный email или пароль"
 INVALID_TOKEN = "Ссылка недействительна или срок её действия истёк"
@@ -40,9 +40,13 @@ class AuthService:
         # Hash before the lookup so that existing and new emails take the same time to answer.
         password_hash = hash_password(password)
         existing = await self._user_by_email(email)
+        if existing is not None and existing.email_verified_at is None and existing.status == "active":
+            # The first verification mail may have failed; sending it again (subject to the cooldown) is the fix.
+            await self.resend_verification(email)
+            return
         if existing is not None:
             # Do not reveal that the account exists: the response is identical, the owner gets a notice.
-            await self.mailer.send(
+            await self._deliver(
                 OutgoingEmail(
                     to=email,
                     subject="QazMind: попытка повторной регистрации",
@@ -152,7 +156,7 @@ class AuthService:
             return
         raw = await self._issue_token(user, "reset_password", timedelta(minutes=self.settings.password_reset_ttl_minutes))
         link = f"{self.settings.public_app_url}/reset-password?token={raw}"
-        await self.mailer.send(
+        await self._deliver(
             OutgoingEmail(
                 to=user.email,
                 subject="QazMind: восстановление пароля",
@@ -197,6 +201,13 @@ class AuthService:
             )
         )
         return result.first() is not None
+
+    async def _deliver(self, message: OutgoingEmail) -> None:
+        try:
+            await self.mailer.send(message)
+        except MailDeliveryError as error:
+            # The token is already stored; the user can request the mail again once the cooldown has passed.
+            raise AppError(503, "MAIL_UNAVAILABLE", "Не удалось отправить письмо. Попробуйте позже.") from error
 
     async def _issue_token(self, user: User, purpose: str, ttl: timedelta) -> str:
         raw = generate_token()
@@ -254,7 +265,7 @@ class AuthService:
 
     async def _send_verification(self, email: str, raw: str) -> None:
         link = f"{self.settings.public_app_url}/verify-email?token={raw}"
-        await self.mailer.send(
+        await self._deliver(
             OutgoingEmail(
                 to=email,
                 subject="QazMind: подтвердите email",
