@@ -1,7 +1,6 @@
 import React from 'react';
 import { Language } from '../../types';
-import { DashboardView, StudentStateType, StudentProfile } from '../../types/dashboard';
-import { WorkspaceSwitcher, WorkspaceOption } from '../common/WorkspaceSwitcher';
+import { DashboardView, StudentProfile } from '../../types/dashboard';
 import {
   Calendar,
   Compass,
@@ -23,7 +22,6 @@ interface DashboardShellProps {
   onLanguageChange: (lang: Language) => void;
   profile: StudentProfile;
   mistakesCount?: number;
-  onSelectWorkspace?: (option: WorkspaceOption) => void;
   onBackToLanding: () => void;
   onLogout: () => void;
   children: React.ReactNode;
@@ -36,7 +34,6 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   onLanguageChange,
   profile,
   mistakesCount = 0,
-  onSelectWorkspace,
   onBackToLanding,
   onLogout,
   children,
@@ -71,7 +68,6 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       labelRu: 'Пробное ЕНТ',
       labelKz: 'Байқау ҰБТ-сы',
       icon: <Award className="w-4 h-4" />,
-      badge: 'Демо',
     },
     {
       id: 'mistakes' as DashboardView,
@@ -95,7 +91,6 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       case 'route':
         return currentLang === 'ru' ? 'Мой маршрут' : 'Менің маршрутым';
       case 'subjects':
-      case 'subject_detail':
         return currentLang === 'ru' ? 'Мои предметы' : 'Менің пәндерім';
       case 'practice':
         return currentLang === 'ru' ? 'Практика' : 'Практика';
@@ -253,12 +248,6 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
           </div>
 
           <div className="flex items-center gap-4">
-            {onSelectWorkspace && (
-              <WorkspaceSwitcher
-                currentWorkspace="personal"
-                onSelectWorkspace={onSelectWorkspace}
-              />
-            )}
 
             {/* Language Switcher */}
             <div className="flex items-center text-xs font-mono font-bold text-[#74736F]">

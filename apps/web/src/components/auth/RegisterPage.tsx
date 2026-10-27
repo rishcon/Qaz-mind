@@ -197,7 +197,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                     setName(e.target.value);
                     if (errorField === 'name') setErrorMessage('');
                   }}
-                  placeholder={currentLang === 'kz' ? 'Мысалы, Әлия' : 'Например, Алия'}
+                  placeholder={currentLang === 'kz' ? 'Аты-жөніңіз' : 'Имя и фамилия'}
                   className={`w-full px-3.5 py-2.5 text-sm bg-[#FAF8F5] border ${
                     errorField === 'name' ? 'border-red-500 ring-1 ring-red-500' : 'border-[#E2DED5]'
                   } focus:outline-none focus:border-[#FF5A36] focus:bg-white transition-colors`}

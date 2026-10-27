@@ -11,7 +11,7 @@ interface UnavailablePageProps {
   onSecondary?: () => void;
 }
 
-/** Honest placeholder for a screen that is not connected to the server yet. Shows no demo data. */
+/** Placeholder for a screen that is not connected to the server yet. It states that and shows no data. */
 export const UnavailablePage: React.FC<UnavailablePageProps> = ({
   label,
   title,

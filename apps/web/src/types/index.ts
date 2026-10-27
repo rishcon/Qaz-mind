@@ -1,57 +1,21 @@
 export type Language = 'ru' | 'kz';
 
-export interface QuestionOption {
-  id: string;
-  textRu: string;
-  textKz: string;
-}
-
-export interface Question {
-  id: string;
-  subjectRu: string;
-  subjectKz: string;
-  topicRu: string;
-  topicKz: string;
-  lessonStep: string; // e.g. "03 / 08"
-  questionRu: string;
-  questionKz: string;
-  options: QuestionOption[];
-  correctOptionId: string;
-  explanationRu: string;
-  explanationKz: string;
-}
-
-export interface ExamQuestion {
-  id: number;
-  subjectRu: string;
-  subjectKz: string;
-  questionRu: string;
-  questionKz: string;
-  options: {
-    id: string;
-    textRu: string;
-    textKz: string;
-  }[];
-  correctId: string;
-  explanationRu: string;
-  explanationKz: string;
-}
-
+/** An ENT subject. The exam structure comes from the ENT specification, not from the content bank. */
 export interface SubjectItem {
   id: string;
   code: string;
   nameRu: string;
   nameKz: string;
   category: 'mandatory' | 'profile';
-  status: 'available' | 'beta' | 'in_development';
-  statusLabelRu: string;
-  statusLabelKz: string;
-  questionsCount: number;
-  topicsCount: number;
+  /** Tasks in the exam for this subject, per the ENT specification. */
+  examTasks: number;
+  /** Points for this subject in the 140-point exam. The specification states them for profile subjects only. */
+  examPoints?: number;
   descriptionRu: string;
   descriptionKz: string;
 }
 
+/** One stage of the learning route. Stages carry no progress or duration: none of that is known yet. */
 export interface RouteStep {
   step: string;
   titleRu: string;
@@ -60,11 +24,4 @@ export interface RouteStep {
   subtitleKz: string;
   descriptionRu: string;
   descriptionKz: string;
-  status: 'completed' | 'current' | 'upcoming';
-  durationRu: string;
-  durationKz: string;
-  kpiRu: string;
-  kpiKz: string;
 }
-
-export type LearningAppTab = 'today' | 'subjects' | 'practice' | 'mock_ent' | 'mistakes' | 'progress';

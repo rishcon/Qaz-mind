@@ -124,7 +124,7 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
         </div>
       </div>
 
-      {/* Mock Exam History */}
+      {/* Trial exam history */}
       {examHistory.length > 0 && (
         <div className="bg-white border border-[#E2DED5] p-6 rounded-sm shadow-xs space-y-4">
           <h2 className="text-base font-bold text-[#171717]">
@@ -138,7 +138,7 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
               >
                 <div>
                   <div className="font-bold text-[#171717]">
-                    Демонстрационный тест ЕНТ
+                    Пробный экзамен ЕНТ
                   </div>
                   <div className="text-[11px] text-[#74736F] font-mono mt-0.5">
                     {h.date}

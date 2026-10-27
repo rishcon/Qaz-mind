@@ -40,7 +40,7 @@ export const ProblemSection: React.FC<ProblemSectionProps> = ({ currentLang }) =
           <div className="md:col-span-4 p-8 md:p-12 flex flex-col justify-between bg-[#F5F3EE]">
             <div>
               <span className="font-mono text-xs text-[#171717]/50 tracking-wider uppercase block mb-2">
-                {currentLang === 'ru' ? 'СТАТИСТИКА ОШИБОК ЕНТ' : 'ҰБТ ҚАТЕЛІКТЕР СТАТИСТИКАСЫ'}
+                {currentLang === 'ru' ? 'ЗАДАНИЙ НА ЕНТ' : 'ҰБТ ТАПСЫРМАЛАРЫ'}
               </span>
               <div className="font-display font-black text-7xl lg:text-8xl text-[#FF5A36] tracking-tighter leading-none my-3">
                 {t.problem.statNumber}

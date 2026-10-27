@@ -2,7 +2,7 @@ import { OFFICIAL_PROFILE_PAIRS } from '../types/auth';
 import { StudentProfile } from '../types/dashboard';
 import { ApiProfile, ProfilePatch } from './endpoints';
 
-// Labels used by the existing screens for each exam period (kept identical to the prototype wording).
+// Labels shown for each exam period.
 export const EXAM_PERIOD_LABELS: Record<ApiProfile['exam_period'], string> = {
   june_main: 'Июнь (основной)',
   march_paid: 'Март (платный)',
@@ -40,6 +40,22 @@ export function toStudentProfile(userName: string, profile: ApiProfile): Student
     profilePairLabelKz: `${pair.titleKz} (${pair.clusterKz})`,
     examDate: examDateLabel(profile.exam_period, profile.exam_year),
     dailyGoalMinutes: profile.daily_goal_minutes,
+  };
+}
+
+/** Profile shown until the server profile is loaded. Every value is empty or zero: nothing is invented. */
+export function emptyStudentProfile(userName: string): StudentProfile {
+  return {
+    name: userName,
+    grade: '',
+    city: '',
+    targetScore: 0,
+    examLanguage: 'ru',
+    profilePairId: '',
+    profilePairLabelRu: '',
+    profilePairLabelKz: '',
+    examDate: '',
+    dailyGoalMinutes: 0,
   };
 }
 

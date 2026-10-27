@@ -34,11 +34,6 @@ export const Footer: React.FC<FooterProps> = ({ currentLang }) => {
             </span>
             <ul className="space-y-2.5">
               <li>
-                <a href="#platform" className="hover:text-[#FF5A36] transition-colors">
-                  {t.nav.platform}
-                </a>
-              </li>
-              <li>
                 <a href="#how-it-works" className="hover:text-[#FF5A36] transition-colors">
                   {t.nav.howItWorks}
                 </a>
@@ -46,11 +41,6 @@ export const Footer: React.FC<FooterProps> = ({ currentLang }) => {
               <li>
                 <a href="#subjects" className="hover:text-[#FF5A36] transition-colors">
                   {t.nav.subjects}
-                </a>
-              </li>
-              <li>
-                <a href="#pricing" className="hover:text-[#FF5A36] transition-colors">
-                  {t.nav.pricing}
                 </a>
               </li>
             </ul>

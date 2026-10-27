@@ -8,7 +8,6 @@ interface HeaderProps {
   onLanguageChange: (lang: Language) => void;
   onOpenLogin: () => void;
   onOpenRegister: () => void;
-  onOpenSchools?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -16,7 +15,6 @@ export const Header: React.FC<HeaderProps> = ({
   onLanguageChange,
   onOpenLogin,
   onOpenRegister,
-  onOpenSchools,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -31,11 +29,8 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   const navLinks = [
-    { href: '#platform', label: t.nav.platform },
     { href: '#how-it-works', label: t.nav.howItWorks },
-    { href: '#schools', label: currentLang === 'kz' ? 'Мектептерге' : 'Школам', isSchool: true },
     { href: '#subjects', label: t.nav.subjects },
-    { href: '#pricing', label: t.nav.pricing },
   ];
 
   return (
@@ -62,12 +57,6 @@ export const Header: React.FC<HeaderProps> = ({
             <a
               key={link.href}
               href={link.href}
-              onClick={(e) => {
-                if (link.isSchool && onOpenSchools) {
-                  e.preventDefault();
-                  onOpenSchools();
-                }
-              }}
               className="relative py-1 whitespace-nowrap shrink-0 hover:text-[#171717] transition-colors after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[1.5px] after:bg-[#FF5A36] hover:after:w-full after:transition-all after:duration-200"
             >
               {link.label}

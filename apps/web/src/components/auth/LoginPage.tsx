@@ -184,7 +184,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             </div>
           </form>
 
-          {/* Quick Demo Switcher / Helper Note */}
+          {/* Note for visitors without an account */}
           <div className="mt-6 pt-5 border-t border-[#E2DED5] text-center">
             <p className="text-xs text-[#74736F]">
               Впервые на QazMind?{' '}

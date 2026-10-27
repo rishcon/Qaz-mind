@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Language } from '../types';
 import { locales } from '../content/locales';
 import { entSubjects } from '../content/questions';
-import { ChevronDown, ChevronUp, BookOpen, Layers } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 interface SubjectsSectionProps {
   currentLang: Language;
@@ -10,6 +10,7 @@ interface SubjectsSectionProps {
 
 export const SubjectsSection: React.FC<SubjectsSectionProps> = ({ currentLang }) => {
   const t = locales[currentLang];
+  const isRu = currentLang === 'ru';
   const [expandedSubjectId, setExpandedSubjectId] = useState<string | null>('history_kz');
 
   const mandatorySubjects = entSubjects.filter((s) => s.category === 'mandatory');
@@ -17,6 +18,53 @@ export const SubjectsSection: React.FC<SubjectsSectionProps> = ({ currentLang })
 
   const toggleExpand = (id: string) => {
     setExpandedSubjectId((prev) => (prev === id ? null : id));
+  };
+
+  const renderSubject = (sub: (typeof entSubjects)[number]) => {
+    const isExpanded = expandedSubjectId === sub.id;
+    const tasksLabel = `${sub.examTasks} ${isRu ? 'заданий' : 'тапсырма'}`;
+    const pointsLabel =
+      sub.examPoints !== undefined ? ` · ${sub.examPoints} ${isRu ? 'баллов' : 'балл'}` : '';
+
+    return (
+      <div key={sub.id} className="group transition-colors hover:bg-white/80">
+        <div
+          onClick={() => toggleExpand(sub.id)}
+          className="py-6 md:py-8 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer"
+        >
+          <div className="flex items-baseline gap-4 md:gap-8">
+            <span className="font-mono text-xs md:text-sm font-bold text-[#FF5A36]">{sub.code}</span>
+            <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold font-display text-[#171717] tracking-tight group-hover:text-[#FF5A36] transition-colors">
+              {isRu ? sub.nameRu : sub.nameKz}
+            </h3>
+          </div>
+
+          <div className="flex items-center gap-4 sm:gap-6 self-start md:self-auto pl-8 md:pl-0">
+            <span className="font-mono text-xs text-[#171717]/60">
+              {tasksLabel}
+              {pointsLabel}
+            </span>
+
+            <div className="text-[#171717]/50 group-hover:text-[#171717]">
+              {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            </div>
+          </div>
+        </div>
+
+        {isExpanded && (
+          <div className="pb-8 pl-8 md:pl-16 pr-4 animate-in fade-in duration-200">
+            <div className="p-6 bg-white border border-[#D9D5CB]">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-[#FF5A36] font-bold block mb-2">
+                {isRu ? 'О содержании предмета' : 'Пән мазмұны туралы'}
+              </span>
+              <p className="text-sm md:text-base text-[#171717]/85 leading-relaxed font-normal">
+                {isRu ? sub.descriptionRu : sub.descriptionKz}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -42,75 +90,12 @@ export const SubjectsSection: React.FC<SubjectsSectionProps> = ({ currentLang })
             <span className="font-mono text-xs font-bold text-[#FF5A36] uppercase tracking-wider">
               {t.subjects.mandatoryHeading}
             </span>
-            <span className="font-mono text-xs text-[#171717]/60">3 / 3 ОБЯЗАТЕЛЬНЫХ</span>
+            <span className="font-mono text-xs text-[#171717]/60">
+              {mandatorySubjects.length} {isRu ? 'ОБЯЗАТЕЛЬНЫХ' : 'МІНДЕТТІ'}
+            </span>
           </div>
-
           <div className="divide-y divide-[#D9D5CB] border-b border-[#D9D5CB]">
-            {mandatorySubjects.map((sub) => {
-              const isExpanded = expandedSubjectId === sub.id;
-
-              return (
-                <div
-                  key={sub.id}
-                  className="group transition-colors hover:bg-white/80"
-                >
-                  <div
-                    onClick={() => toggleExpand(sub.id)}
-                    className="py-6 md:py-8 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer"
-                  >
-                    <div className="flex items-baseline gap-4 md:gap-8">
-                      <span className="font-mono text-xs md:text-sm font-bold text-[#FF5A36]">
-                        {sub.code}
-                      </span>
-                      <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold font-display text-[#171717] tracking-tight group-hover:text-[#FF5A36] transition-colors">
-                        {currentLang === 'ru' ? sub.nameRu : sub.nameKz}
-                      </h3>
-                    </div>
-
-                    <div className="flex items-center gap-4 sm:gap-6 self-start md:self-auto pl-8 md:pl-0">
-                      <span className="font-mono text-xs text-[#171717]/60">
-                        {sub.topicsCount} {currentLang === 'ru' ? 'тем' : 'тақырып'} · {sub.questionsCount}+ {currentLang === 'ru' ? 'заданий' : 'тапсырма'}
-                      </span>
-
-                      <span className="font-mono text-xs font-semibold px-2 py-0.5 bg-[#EAE7DF] border border-[#D9D5CB] text-[#171717]">
-                        {currentLang === 'ru' ? sub.statusLabelRu : sub.statusLabelKz}
-                      </span>
-
-                      <div className="text-[#171717]/50 group-hover:text-[#171717]">
-                        {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Expanded syllabus brief */}
-                  {isExpanded && (
-                    <div className="pb-8 pl-8 md:pl-16 pr-4 animate-in fade-in duration-200">
-                      <div className="p-6 bg-white border border-[#D9D5CB] grid grid-cols-1 md:grid-cols-12 gap-6">
-                        <div className="md:col-span-8">
-                          <span className="font-mono text-[11px] uppercase tracking-wider text-[#FF5A36] font-bold block mb-2">
-                            {currentLang === 'ru' ? 'О структуре программы' : 'Бағдарлама құрылымы туралы'}
-                          </span>
-                          <p className="text-sm md:text-base text-[#171717]/85 leading-relaxed font-normal">
-                            {currentLang === 'ru' ? sub.descriptionRu : sub.descriptionKz}
-                          </p>
-                        </div>
-
-                        <div className="md:col-span-4 border-t md:border-t-0 md:border-l border-[#D9D5CB] md:pl-6 flex flex-col justify-between text-xs font-mono space-y-2">
-                          <div>
-                            <span className="text-[#171717]/60 block">{currentLang === 'ru' ? 'ОБЯЗАТЕЛЬНЫЙ БЛОК' : 'МІНДЕТТІ БЛОК'}</span>
-                            <span className="font-bold text-[#171717]">{currentLang === 'ru' ? '20 вопросов на экзамене' : 'Емтиханда 20 сұрақ'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[#171717]/60 block">{currentLang === 'ru' ? 'МЕТОДОЛОГИЯ' : 'ӘДІСТЕМЕ'}</span>
-                            <span className="font-bold text-[#171717]">{currentLang === 'ru' ? 'Контекст + Логика' : 'Мәнмәтін + Логика'}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {mandatorySubjects.map(renderSubject)}
           </div>
         </div>
 
@@ -120,83 +105,12 @@ export const SubjectsSection: React.FC<SubjectsSectionProps> = ({ currentLang })
             <span className="font-mono text-xs font-bold text-[#FF5A36] uppercase tracking-wider">
               {t.subjects.profileHeading}
             </span>
-            <span className="font-mono text-xs text-[#171717]/60">6 ПРОФИЛЬНЫХ ДИСЦИПЛИН</span>
+            <span className="font-mono text-xs text-[#171717]/60">
+              {profileSubjects.length} {isRu ? 'ПРОФИЛЬНЫХ ДИСЦИПЛИН' : 'БЕЙІНДІК ПӘН'}
+            </span>
           </div>
-
           <div className="divide-y divide-[#D9D5CB] border-b border-[#D9D5CB]">
-            {profileSubjects.map((sub) => {
-              const isExpanded = expandedSubjectId === sub.id;
-
-              return (
-                <div
-                  key={sub.id}
-                  className="group transition-colors hover:bg-white/80"
-                >
-                  <div
-                    onClick={() => toggleExpand(sub.id)}
-                    className="py-6 md:py-8 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer"
-                  >
-                    <div className="flex items-baseline gap-4 md:gap-8">
-                      <span className="font-mono text-xs md:text-sm font-bold text-[#171717]/50">
-                        {sub.code}
-                      </span>
-                      <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold font-display text-[#171717] tracking-tight group-hover:text-[#FF5A36] transition-colors">
-                        {currentLang === 'ru' ? sub.nameRu : sub.nameKz}
-                      </h3>
-                    </div>
-
-                    <div className="flex items-center gap-4 sm:gap-6 self-start md:self-auto pl-8 md:pl-0">
-                      <span className="font-mono text-xs text-[#171717]/60">
-                        {sub.topicsCount} {currentLang === 'ru' ? 'тем' : 'тақырып'} · {sub.questionsCount}+ {currentLang === 'ru' ? 'заданий' : 'тапсырма'}
-                      </span>
-
-                      <span
-                        className={`font-mono text-xs font-semibold px-2 py-0.5 border ${
-                          sub.status === 'available'
-                            ? 'bg-[#EAE7DF] border-[#D9D5CB] text-[#171717]'
-                            : sub.status === 'beta'
-                            ? 'bg-[#FFF5F2] border-[#FF5A36]/40 text-[#FF5A36]'
-                            : 'bg-transparent border-[#D9D5CB] text-[#171717]/60'
-                        }`}
-                      >
-                        {currentLang === 'ru' ? sub.statusLabelRu : sub.statusLabelKz}
-                      </span>
-
-                      <div className="text-[#171717]/50 group-hover:text-[#171717]">
-                        {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Expanded syllabus brief */}
-                  {isExpanded && (
-                    <div className="pb-8 pl-8 md:pl-16 pr-4 animate-in fade-in duration-200">
-                      <div className="p-6 bg-white border border-[#D9D5CB] grid grid-cols-1 md:grid-cols-12 gap-6">
-                        <div className="md:col-span-8">
-                          <span className="font-mono text-[11px] uppercase tracking-wider text-[#FF5A36] font-bold block mb-2">
-                            {currentLang === 'ru' ? 'О структуре программы' : 'Бағдарлама құрылымы туралы'}
-                          </span>
-                          <p className="text-sm md:text-base text-[#171717]/85 leading-relaxed font-normal">
-                            {currentLang === 'ru' ? sub.descriptionRu : sub.descriptionKz}
-                          </p>
-                        </div>
-
-                        <div className="md:col-span-4 border-t md:border-t-0 md:border-l border-[#D9D5CB] md:pl-6 flex flex-col justify-between text-xs font-mono space-y-2">
-                          <div>
-                            <span className="text-[#171717]/60 block">{currentLang === 'ru' ? 'СТАТУС КУРСА' : 'КУРС СТАТУСЫ'}</span>
-                            <span className="font-bold text-[#171717]">{currentLang === 'ru' ? sub.statusLabelRu : sub.statusLabelKz}</span>
-                          </div>
-                          <div>
-                            <span className="text-[#171717]/60 block">{currentLang === 'ru' ? 'ВЕС В ЕНТ' : 'ҰБТ-ДАҒЫ САЛМАҒЫ'}</span>
-                            <span className="font-bold text-[#171717]">{currentLang === 'ru' ? '35 вопросов (макс. 45 баллов)' : '35 сұрақ (макс. 45 балл)'}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {profileSubjects.map(renderSubject)}
           </div>
         </div>
       </div>

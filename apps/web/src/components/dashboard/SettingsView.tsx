@@ -160,28 +160,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
 
-        {/* Section 3: School Affiliation */}
-        <div className="space-y-4 pt-4 border-t border-[#E2DED5]">
-          <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#FF5A36] block">
-            Школьное обучение
-          </span>
-
-          <div className="p-4 bg-[#FAF9F5] border border-[#E2DED5] rounded text-xs space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-bold text-[#171717]">Лицей №28 им. К. Сатпаева</div>
-                <div className="text-[11px] text-[#74736F]">Класс 11 «А» · Подготовка к ЕНТ 2026/2027</div>
-              </div>
-              <span className="px-2 py-0.5 bg-[#258568]/10 text-[#258568] font-mono font-bold rounded">
-                Подключен
-              </span>
-            </div>
-            <p className="text-[11px] text-[#74736F] pt-1">
-              Вы прикреплены к классу по коду. Все ваши школьные проверочные работы отображаются на вкладке «Сегодня».
-            </p>
-          </div>
-        </div>
-
         {/* Submit Button */}
         <div className="pt-4 border-t border-[#E2DED5] flex justify-end">
           <button
