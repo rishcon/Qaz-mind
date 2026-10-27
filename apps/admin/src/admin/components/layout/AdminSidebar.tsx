@@ -22,8 +22,10 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  LogOut,
 } from 'lucide-react';
-import { adminService } from '../../services/adminService';
+import { useAttention } from '../../api/AttentionProvider';
+import { ROLE_TITLES, useStaff } from '../../auth/StaffAuth';
 
 interface AdminSidebarProps {
   currentPath: string;
@@ -40,86 +42,81 @@ interface NavGroup {
     icon: React.ComponentType<{ className?: string }>;
     badge?: number | null;
     requiredPermission?: string;
+    /** The section has no server side yet. */
+    soon?: boolean;
   }>;
 }
 
 export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPath, onNavigate, collapsed, onToggleCollapse }) => {
-  // Badges come from the server. A null counter means "not loaded", so no badge is drawn for it.
-  const counters = adminService.getCounters();
-  const badge = (value: number | null) => (value !== null && value > 0 ? value : undefined);
+  const { session, can, signOut } = useStaff();
+  // Badges are counted by the server.
+  const { items: attention } = useAttention();
+  const count = (id: string) => attention.find((a) => a.id === id)?.count;
 
   const navGroups: NavGroup[] = [
     {
       title: 'ОСНОВНОЕ',
       items: [
         { title: 'Обзор', path: '/admin', icon: LayoutDashboard },
-        { title: 'Пользователи', path: '/admin/users', icon: Users },
-        {
-          title: 'Школы',
-          path: '/admin/schools',
-          icon: Building2,
-          badge: badge(counters.pendingSchools),
-        },
-        { title: 'Учителя', path: '/admin/teachers', icon: GraduationCap },
+        { title: 'Пользователи', path: '/admin/users', icon: Users, requiredPermission: 'users.read' },
+        { title: 'Школы', path: '/admin/schools', icon: Building2, requiredPermission: 'schools.read', soon: true },
+        { title: 'Учителя', path: '/admin/teachers', icon: GraduationCap, requiredPermission: 'users.read', soon: true },
       ],
     },
     {
       title: 'ОБУЧЕНИЕ',
       items: [
         { title: 'Предметы', path: '/admin/content/subjects', icon: BookOpen },
-        { title: 'Уроки', path: '/admin/content/lessons', icon: FileText },
+        { title: 'Уроки', path: '/admin/content/lessons', icon: FileText, badge: count('lessons_in_review') },
         { title: 'Банк вопросов', path: '/admin/content/questions', icon: HelpCircle },
         {
           title: 'Модерация',
           path: '/admin/content/review',
           icon: FileCheck2,
-          badge: badge(counters.inReviewQuestions),
+          badge: count('questions_in_review'),
+          requiredPermission: 'content.review',
         },
-        { title: 'Экзамены', path: '/admin/exams', icon: Award },
-        { title: 'Задания', path: '/admin/assignments', icon: CalendarCheck },
+        { title: 'Экзамены', path: '/admin/exams', icon: Award, requiredPermission: 'exams.manage', soon: true },
+        { title: 'Задания', path: '/admin/assignments', icon: CalendarCheck, requiredPermission: 'schools.read', soon: true },
       ],
     },
     {
       title: 'АНАЛИТИКА',
       items: [
         { title: 'Аналитика', path: '/admin/analytics', icon: BarChart3 },
-        { title: 'Активность', path: '/admin/activity', icon: Activity },
-        { title: 'История действий', path: '/admin/audit', icon: History },
+        { title: 'Активность', path: '/admin/activity', icon: Activity, requiredPermission: 'users.read', soon: true },
+        { title: 'История действий', path: '/admin/audit', icon: History, requiredPermission: 'audit.read' },
       ],
     },
     {
       title: 'УПРАВЛЕНИЕ',
       items: [
-        { title: 'Подписки', path: '/admin/finance', icon: CreditCard },
-        {
-          title: 'Обращения',
-          path: '/admin/support',
-          icon: MessageSquare,
-          badge: badge(counters.openTickets),
-        },
-        {
-          title: 'Жалобы',
-          path: '/admin/reports',
-          icon: AlertOctagon,
-          badge: badge(counters.pendingReports),
-        },
-        { title: 'Мониторинг', path: '/admin/monitoring', icon: Cpu },
+        { title: 'Подписки', path: '/admin/finance', icon: CreditCard, requiredPermission: 'finance.manage', soon: true },
+        { title: 'Обращения', path: '/admin/support', icon: MessageSquare, requiredPermission: 'support.manage', soon: true },
+        { title: 'Жалобы', path: '/admin/reports', icon: AlertOctagon, requiredPermission: 'reports.resolve', soon: true },
+        { title: 'Мониторинг', path: '/admin/monitoring', icon: Cpu, requiredPermission: 'monitoring.read' },
         {
           title: 'Уведомления',
           path: '/admin/notifications',
           icon: Bell,
-          badge: badge(counters.unreadNotifications),
+          badge: attention.reduce((sum, a) => sum + a.count, 0) || undefined,
         },
       ],
     },
     {
       title: 'СИСТЕМА',
       items: [
-        { title: 'Администраторы', path: '/admin/roles', icon: ShieldCheck },
-        { title: 'Настройки', path: '/admin/settings', icon: Settings },
+        { title: 'Администраторы', path: '/admin/roles', icon: ShieldCheck, requiredPermission: 'staff.manage' },
+        { title: 'Настройки', path: '/admin/settings', icon: Settings, requiredPermission: 'settings.manage', soon: true },
       ],
     },
-  ];
+  ]
+    .map((group) => ({
+      ...group,
+      // Hiding a link is convenience only: the server refuses the request anyway.
+      items: group.items.filter((item) => !item.requiredPermission || can(item.requiredPermission)),
+    }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <aside
@@ -187,7 +184,12 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPath, onNavig
                     {!collapsed && <span className="truncate">{item.title}</span>}
                   </div>
 
-                  {!collapsed && item.badge !== undefined && (
+                  {!collapsed && item.soon && (
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider bg-[#F0EEE8] text-[#A8A29E]">
+                      скоро
+                    </span>
+                  )}
+                  {!collapsed && !item.soon && item.badge !== undefined && item.badge !== null && item.badge > 0 && (
                     <span
                       className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
                         isActive
@@ -205,18 +207,35 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPath, onNavig
         ))}
       </div>
 
-      {/* Current administrator. Sign-in is not implemented yet, so no identity is shown. */}
+      {/* Signed-in staff member, as confirmed by the server */}
       <div className="border-t border-[#E2DED5] p-3 bg-[#FCFBF9] shrink-0">
         {!collapsed ? (
-          <div className="p-2 rounded-lg bg-white border border-[#E2DED5]">
-            <p className="text-xs font-semibold text-[#171717]">Вход не выполнен</p>
-            <p className="text-[10px] text-[#78716C] mt-0.5">Вход администраторов не подключён</p>
+          <div className="p-2 rounded-lg bg-white border border-[#E2DED5] flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-[#171717] truncate">{session?.staff.name}</p>
+              <p className="text-[10px] text-[#78716C] mt-0.5 truncate">
+                {session?.staff.roles.map((r) => ROLE_TITLES[r] ?? r).join(', ')}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              title="Выйти"
+              className="p-1 rounded text-[#78716C] hover:bg-[#F5F3EE] hover:text-[#C94A43] cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
           </div>
         ) : (
           <div className="flex justify-center">
-            <span className="w-8 h-8 rounded-full bg-[#F0EEE8] flex items-center justify-center text-[10px] font-bold text-[#78716C] border border-[#E2DED5]" title="Вход не выполнен">
-              —
-            </span>
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              title="Выйти"
+              className="w-8 h-8 rounded-full bg-[#F0EEE8] flex items-center justify-center text-[#78716C] border border-[#E2DED5] cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
           </div>
         )}
       </div>

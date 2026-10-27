@@ -1,4 +1,7 @@
 /**
+ * Data layer of the sections that have no server side yet (schools, teachers, exams, assignments, support,
+ * reports, finance, settings, user activity). Connected sections use src/admin/api/client.ts instead.
+ *
  * QazMind Admin data layer.
  *
  * The administrative API (/api/v1/admin/...) does not exist yet, and administrator sign-in is not implemented.
@@ -38,7 +41,7 @@ export const ADMIN_API_CONNECTED = false;
 
 export class AdminNotConnectedError extends Error {
   constructor(action: string) {
-    super(`Сервер администрирования не подключён: «${action}» не выполнено. Изменения не сохранены.`);
+    super(`Этот раздел ещё не подключён к серверу: «${action}» не выполнено. Изменения не сохранены.`);
     this.name = 'AdminNotConnectedError';
   }
 }

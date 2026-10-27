@@ -39,6 +39,14 @@ const statusMap: Record<string, { label: string; bg: string; text: string; dot: 
   expired: { label: 'Истек', bg: 'bg-[#FDF2F2]', text: 'text-[#9B2C2C]', dot: 'bg-[#C94A43]' },
   trial: { label: 'Пробный', bg: 'bg-[#F5F3FF]', text: 'text-[#6D28D9]', dot: 'bg-[#8B5CF6]' },
   degraded: { label: 'Снижена', bg: 'bg-[#FEF7EA]', text: 'text-[#9A6715]', dot: 'bg-[#D89B35]' },
+  disabled: { label: 'Отключён', bg: 'bg-[#FDF2F2]', text: 'text-[#9B2C2C]', dot: 'bg-[#C94A43]' },
+  invited: { label: 'Приглашён', bg: 'bg-[#FEF7EA]', text: 'text-[#9A6715]', dot: 'bg-[#D89B35]' },
+  unverified: { label: 'Email не подтверждён', bg: 'bg-[#FEF7EA]', text: 'text-[#9A6715]', dot: 'bg-[#D89B35]' },
+  ok: { label: 'Работает', bg: 'bg-[#EBF7F2]', text: 'text-[#1D6A53]', dot: 'bg-[#258568]' },
+  down: { label: 'Недоступен', bg: 'bg-[#FDF2F2]', text: 'text-[#9B2C2C]', dot: 'bg-[#C94A43]' },
+  not_configured: { label: 'Не настроено', bg: 'bg-[#F0EEE8]', text: 'text-[#5C574F]', dot: 'bg-[#A8A29E]' },
+  success: { label: 'Успешно', bg: 'bg-[#EBF7F2]', text: 'text-[#1D6A53]', dot: 'bg-[#258568]' },
+  failure: { label: 'Отказ', bg: 'bg-[#FDF2F2]', text: 'text-[#9B2C2C]', dot: 'bg-[#C94A43]' },
 };
 
 export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, label, size = 'sm' }) => {

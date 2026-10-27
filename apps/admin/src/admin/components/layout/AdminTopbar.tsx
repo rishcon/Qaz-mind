@@ -13,7 +13,8 @@ import {
   UserCheck,
   FileCheck2,
 } from 'lucide-react';
-import { adminService } from '../../services/adminService';
+import { useAttention } from '../../api/AttentionProvider';
+import { useStaff } from '../../auth/StaffAuth';
 
 interface AdminTopbarProps {
   currentPath: string;
@@ -31,8 +32,11 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
   const [quickMenuOpen, setQuickMenuOpen] = useState(false);
   const [notifMenuOpen, setNotifMenuOpen] = useState(false);
 
-  const notifications = adminService.getNotifications();
-  const unreadCount = adminService.getCounters().unreadNotifications ?? 0;
+  // Items that need action, counted by the server (reviews, unanswered invitations).
+  const { items: attention } = useAttention();
+  const unreadCount = attention.reduce((sum, item) => sum + item.count, 0);
+  const { can } = useStaff();
+  const canCreate = can('content.create');
 
   // Breadcrumbs calculation
   const getBreadcrumbs = () => {
@@ -132,6 +136,7 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
         </button>
 
         {/* Quick Action Dropdown */}
+        {canCreate && (
         <div className="relative">
           <button
             onClick={() => setQuickMenuOpen(!quickMenuOpen)}
@@ -154,16 +159,7 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
                 <FileQuestion className="w-4 h-4 text-[#FF5A36]" />
                 <span>Добавить вопрос ЕНТ</span>
               </button>
-              <button
-                onClick={() => {
-                  setQuickMenuOpen(false);
-                  onNavigate('/admin/exams');
-                }}
-                className="w-full text-left px-2.5 py-2 rounded hover:bg-[#F5F3EE] flex items-center gap-2 text-[#171717] cursor-pointer"
-              >
-                <Award className="w-4 h-4 text-[#D89B35]" />
-                <span>Собрать пробный экзамен</span>
-              </button>
+
               <button
                 onClick={() => {
                   setQuickMenuOpen(false);
@@ -187,6 +183,7 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
             </div>
           )}
         </div>
+        )}
 
         {/* Notifications Bell */}
         <div className="relative">
@@ -204,31 +201,24 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
           {notifMenuOpen && (
             <div className="absolute right-0 mt-1 w-80 bg-white rounded-lg shadow-xl border border-[#E2DED5] overflow-hidden z-50 animate-in fade-in">
               <div className="p-3 border-b border-[#E2DED5] flex items-center justify-between bg-[#FCFBF9]">
-                <span className="text-xs font-semibold text-[#171717]">Уведомления платформы</span>
-                <span className="text-[10px] text-[#A8A29E]">{unreadCount > 0 ? `${unreadCount} новых` : ''}</span>
+                <span className="text-xs font-semibold text-[#171717]">Требует внимания</span>
+                <span className="text-[10px] text-[#A8A29E]">{unreadCount > 0 ? `${unreadCount}` : ''}</span>
               </div>
               <div className="max-h-72 overflow-y-auto divide-y divide-[#E2DED5]">
-                {notifications.length === 0 ? (
-                  <div className="p-4 text-center text-xs text-[#78716C]">Нет уведомлений</div>
+                {attention.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-[#78716C]">Сейчас ничего не ждёт действий</div>
                 ) : (
-                  notifications.map((notif) => (
+                  attention.map((item) => (
                     <div
-                      key={notif.id}
+                      key={item.id}
                       onClick={() => {
                         setNotifMenuOpen(false);
-                        onNavigate(notif.linkUrl);
+                        onNavigate(item.action_url);
                       }}
-                      className={`p-3 text-xs hover:bg-[#F9F8F5] cursor-pointer transition-colors ${
-                        !notif.isRead ? 'bg-[#FFF7F5]' : ''
-                      }`}
+                      className="p-3 text-xs hover:bg-[#F9F8F5] cursor-pointer transition-colors flex items-center justify-between gap-2"
                     >
-                      <div className="flex items-start justify-between gap-1">
-                        <p className="font-semibold text-[#171717] leading-snug">{notif.title}</p>
-                        {!notif.isRead && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#FF5A36] shrink-0 mt-1" />
-                        )}
-                      </div>
-                      <p className="text-[11px] text-[#78716C] mt-1 leading-relaxed">{notif.message}</p>
+                      <p className="font-semibold text-[#171717] leading-snug">{item.title}</p>
+                      <span className="px-1.5 py-0.5 rounded-full bg-[#FF5A36] text-white text-[10px] font-bold">{item.count}</span>
                     </div>
                   ))
                 )}
@@ -241,7 +231,7 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({
                   }}
                   className="text-xs text-[#FF5A36] hover:underline font-medium cursor-pointer"
                 >
-                  Все уведомления
+                  Открыть все
                 </button>
               </div>
             </div>

@@ -1,65 +1,65 @@
-import React, { useState } from 'react';
-import {
-  Users,
-  UserCheck,
-  UserX,
-  Shield,
-  Download,
-  MoreVertical,
-  ExternalLink,
-  Ban,
-  CheckCircle2,
-} from 'lucide-react';
-import { UserAccount, AccountStatus } from '../types';
-import { adminService } from '../services/adminService';
+import React, { useEffect, useState } from 'react';
+import { Download, ExternalLink } from 'lucide-react';
+import { adminApi, StudentRow } from '../api/client';
+import { runAction, useAdminData } from '../api/useAdminData';
+import { useStaff } from '../auth/StaffAuth';
 import { DataTable, ColumnDef, TableFilter } from '../components/ui/DataTable';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { ConfirmationDialog } from '../components/ui/ConfirmationDialog';
 import { ExportDialog } from '../components/ui/ExportDialog';
-import { ActionResultNotice, failureResult, type ActionResult } from '../components/ui/ConnectionNotice';
+import { ActionResultNotice, type ActionResult } from '../components/ui/ConnectionNotice';
+import { ErrorBlock, fmtDate } from '../components/ui/PageState';
 
 interface UsersPageProps {
   onNavigate: (path: string) => void;
 }
 
+const PAGE_SIZE = 100;
+
 export const UsersPage: React.FC<UsersPageProps> = ({ onNavigate }) => {
+  const { can } = useStaff();
   const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
+  const [debounced, setDebounced] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-
-  // Dialogs
-  const [confirmDialog, setConfirmDialog] = useState<{
-    open: boolean;
-    user?: UserAccount;
-    action?: 'suspend' | 'activate';
-  }>({ open: false });
-
+  const [page, setPage] = useState(1);
   const [exportOpen, setExportOpen] = useState(false);
   const [result, setResult] = useState<ActionResult | null>(null);
+  const [dialog, setDialog] = useState<{ user: StudentRow; next: 'active' | 'disabled' } | null>(null);
+  const [reason, setReason] = useState('');
 
-  const users = adminService.getUsers({
-    search,
-    role: roleFilter,
-    status: statusFilter,
-  });
+  // Search runs on the server, a moment after typing stops.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebounced(search);
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
-  const handleConfirmAction = () => {
-    if (!confirmDialog.user || !confirmDialog.action) return;
-    const newStatus: AccountStatus = confirmDialog.action === 'suspend' ? 'suspended' : 'active';
-    try {
-      adminService.updateUserStatus(confirmDialog.user.id, newStatus);
-      setResult({ tone: 'success', text: newStatus === 'suspended' ? 'Доступ приостановлен.' : 'Доступ восстановлен.' });
-    } catch (error) {
-      setResult(failureResult(error));
-    }
-    setConfirmDialog({ open: false });
+  const { data, error, loading, reload } = useAdminData(
+    () => adminApi.users({ search: debounced, status: statusFilter, page, page_size: PAGE_SIZE }),
+    [debounced, statusFilter, page],
+    30000,
+  );
+  const users = data?.items ?? [];
+  const pages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
+
+  const confirmStatus = async () => {
+    if (!dialog) return;
+    const ok = await runAction(
+      () => adminApi.setUserStatus(dialog.user.id, dialog.next, reason.trim()),
+      dialog.next === 'disabled' ? 'Доступ приостановлен, сессии ученика завершены.' : 'Доступ восстановлен.',
+      setResult,
+    );
+    setDialog(null);
+    setReason('');
+    if (ok) reload();
   };
 
-  const columns: ColumnDef<UserAccount>[] = [
+  const columns: ColumnDef<StudentRow>[] = [
     {
       key: 'name',
-      header: 'Пользователь',
+      header: 'Ученик',
       sortable: true,
       cell: (u) => (
         <div className="flex items-center gap-2.5">
@@ -67,70 +67,51 @@ export const UsersPage: React.FC<UsersPageProps> = ({ onNavigate }) => {
             {u.name.slice(0, 2).toUpperCase()}
           </div>
           <div>
-            <div className="font-semibold text-xs text-[#171717] hover:text-[#FF5A36] transition-colors">
-              {u.name}
-            </div>
+            <div className="font-semibold text-xs text-[#171717]">{u.name}</div>
             <div className="text-[11px] text-[#78716C]">{u.email}</div>
           </div>
         </div>
       ),
     },
     {
-      key: 'role',
-      header: 'Тип аккаунта',
-      sortable: true,
-      cell: (u) => {
-        const roleLabels: Record<string, string> = {
-          student: 'Ученик ЕНТ',
-          teacher: 'Преподаватель',
-          school_admin: 'Админ школы',
-          platform_admin: 'Администратор',
-        };
-        return (
-          <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-[#F0EEE8] text-[#5C574F]">
-            {roleLabels[u.role] || u.role}
-          </span>
-        );
-      },
-    },
-    {
-      key: 'organizationName',
-      header: 'Организация / Школа',
-      sortable: true,
+      key: 'onboarding_completed',
+      header: 'Профиль',
       cell: (u) => (
-        <span className="text-xs text-[#171717]">{u.organizationName || '— (Индивидуально)'}</span>
-      ),
-    },
-    {
-      key: 'registeredAt',
-      header: 'Дата регистрации',
-      sortable: true,
-      cell: (u) => (
-        <span className="text-[11px] font-mono text-[#78716C]">
-          {new Date(u.registeredAt).toLocaleDateString('ru-RU')}
+        <span className="text-xs text-[#5C574F]">
+          {u.onboarding_completed ? `Цель ${u.target_score ?? '—'} / 140` : 'Онбординг не пройден'}
         </span>
       ),
     },
     {
-      key: 'lastActiveAt',
+      key: 'lessons_completed',
+      header: 'Уроков пройдено',
+      sortable: true,
+      cell: (u) => <span className="font-mono text-xs text-[#171717]">{u.lessons_completed}</span>,
+    },
+    {
+      key: 'created_at',
+      header: 'Регистрация',
+      sortable: true,
+      cell: (u) => <span className="text-[11px] font-mono text-[#78716C]">{fmtDate(u.created_at)}</span>,
+    },
+    {
+      key: 'last_seen_at',
       header: 'Последняя активность',
       sortable: true,
-      cell: (u) => (
-        <span className="text-[11px] font-mono text-[#78716C]">
-          {new Date(u.lastActiveAt).toLocaleString('ru-RU', {
-            day: '2-digit',
-            month: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
-        </span>
-      ),
+      cell: (u) => <span className="text-[11px] font-mono text-[#78716C]">{fmtDate(u.last_seen_at, true)}</span>,
     },
     {
       key: 'status',
       header: 'Статус',
       sortable: true,
-      cell: (u) => <StatusBadge status={u.status} />,
+      cell: (u) =>
+        u.status === 'disabled' ? (
+          <StatusBadge status="disabled" label="Заблокирован" />
+        ) : u.email_verified ? (
+          <StatusBadge status="active" />
+        ) : (
+          <StatusBadge status="unverified" />
+        ),
     },
     {
       key: 'actions',
@@ -139,28 +120,26 @@ export const UsersPage: React.FC<UsersPageProps> = ({ onNavigate }) => {
       headerClassName: 'text-right',
       cell: (u) => (
         <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-          {u.status === 'active' ? (
-            <button
-              onClick={() => setConfirmDialog({ open: true, user: u, action: 'suspend' })}
-              className="px-2 py-1 text-[11px] font-medium text-[#C94A43] bg-white border border-[#FCA5A5] rounded hover:bg-[#FDF2F2] cursor-pointer"
-              title="Приостановить доступ"
-            >
-              Заблокировать
-            </button>
-          ) : (
-            <button
-              onClick={() => setConfirmDialog({ open: true, user: u, action: 'activate' })}
-              className="px-2 py-1 text-[11px] font-medium text-[#258568] bg-white border border-[#A7F3D0] rounded hover:bg-[#EBF7F2] cursor-pointer"
-              title="Восстановить доступ"
-            >
-              Активировать
-            </button>
-          )}
-
+          {can('users.suspend') &&
+            (u.status === 'active' ? (
+              <button
+                onClick={() => setDialog({ user: u, next: 'disabled' })}
+                className="px-2 py-1 text-[11px] font-medium text-[#C94A43] bg-white border border-[#FCA5A5] rounded hover:bg-[#FDF2F2] cursor-pointer"
+              >
+                Заблокировать
+              </button>
+            ) : (
+              <button
+                onClick={() => setDialog({ user: u, next: 'active' })}
+                className="px-2 py-1 text-[11px] font-medium text-[#258568] bg-white border border-[#A7F3D0] rounded hover:bg-[#EBF7F2] cursor-pointer"
+              >
+                Разблокировать
+              </button>
+            ))}
           <button
             onClick={() => onNavigate(`/admin/users/${u.id}`)}
             className="p-1 rounded text-[#78716C] hover:bg-[#F5F3EE] hover:text-[#171717] cursor-pointer"
-            title="Открыть подробный профиль"
+            title="Открыть карточку"
           >
             <ExternalLink className="w-3.5 h-3.5" />
           </button>
@@ -171,27 +150,18 @@ export const UsersPage: React.FC<UsersPageProps> = ({ onNavigate }) => {
 
   const filters: TableFilter[] = [
     {
-      key: 'role',
-      label: 'Роль',
-      selectedValue: roleFilter,
-      onChange: setRoleFilter,
-      options: [
-        { label: 'Все роли', value: 'all' },
-        { label: 'Ученики', value: 'student' },
-        { label: 'Преподаватели', value: 'teacher' },
-        { label: 'Админы школ', value: 'school_admin' },
-      ],
-    },
-    {
       key: 'status',
       label: 'Статус',
       selectedValue: statusFilter,
-      onChange: setStatusFilter,
+      onChange: (value) => {
+        setStatusFilter(value);
+        setPage(1);
+      },
       options: [
-        { label: 'Все статусы', value: 'all' },
+        { label: 'Все', value: 'all' },
         { label: 'Активные', value: 'active' },
-        { label: 'На проверке', value: 'pending_verification' },
-        { label: 'Заблокированные', value: 'suspended' },
+        { label: 'Email не подтверждён', value: 'unverified' },
+        { label: 'Заблокированные', value: 'disabled' },
       ],
     },
   ];
@@ -201,96 +171,105 @@ export const UsersPage: React.FC<UsersPageProps> = ({ onNavigate }) => {
       setResult({ tone: 'error', text: 'Список пуст: выгружать нечего.' });
       return;
     }
-    const dataToExport = users.map((u) => ({
+    const rows = users.map((u) => ({
       ID: u.id,
       Имя: u.name,
-      Email: u.email,
-      Роль: u.role,
-      Школа: u.organizationName || 'Индивидуально',
+      Email: options.includePii ? u.email : '[скрыто]',
       Статус: u.status,
-      Телефон: options.includePii ? u.phone || '' : '[Скрыто]',
-      ЦелевойБалл: u.targetEntScore || '',
+      EmailПодтверждён: u.email_verified ? 'да' : 'нет',
+      Регистрация: u.created_at,
+      УроковПройдено: u.lessons_completed,
     }));
-
-    const blob = new Blob(
-      [
-        format === 'csv'
-          ? Object.keys(dataToExport[0]).join(',') +
-            '\n' +
-            dataToExport.map((row) => Object.values(row).map((v) => `"${v}"`).join(',')).join('\n')
-          : JSON.stringify(dataToExport, null, 2),
-      ],
-      { type: format === 'csv' ? 'text/csv;charset=utf-8;' : 'application/json' }
-    );
-
+    const content =
+      format === 'csv'
+        ? [Object.keys(rows[0]).join(','), ...rows.map((r) => Object.values(r).map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))].join('\n')
+        : JSON.stringify(rows, null, 2);
+    const blob = new Blob([content], { type: format === 'csv' ? 'text/csv;charset=utf-8;' : 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `qazmind_users_${Date.now()}.${format}`;
-    document.body.appendChild(link);
+    link.download = `qazmind_users_${new Date().toISOString().slice(0, 10)}.${format}`;
     link.click();
-    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
     <div className="space-y-5 animate-in fade-in duration-150">
-      {/* Top Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-[#E2DED5]">
         <div>
-          <h1 className="text-xl font-bold text-[#171717]">Управление пользователями</h1>
+          <h1 className="text-xl font-bold text-[#171717]">Ученики</h1>
           <p className="text-xs text-[#78716C] mt-0.5">
-            Реестр учетных записей платформы, проверка статусов и управление доступом к тестированию.
+            {data ? `${data.total} учётных записей в базе` : 'Загрузка…'}. Список обновляется каждые 30 секунд.
           </p>
         </div>
-
         <button
           onClick={() => setExportOpen(true)}
           className="px-3 py-1.5 text-xs font-medium text-[#171717] bg-white border border-[#E2DED5] rounded-md hover:bg-[#F5F3EE] flex items-center gap-1.5 cursor-pointer shadow-2xs"
         >
-          <Download className="w-3.5 h-3.5 text-[#78716C]" /> Экспорт реестра
+          <Download className="w-3.5 h-3.5 text-[#78716C]" /> Экспорт
         </button>
       </div>
 
       <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
+      {error && <ErrorBlock text={error} onRetry={reload} />}
 
-      {/* Main Data Table */}
       <DataTable
         data={users}
         columns={columns}
         keyExtractor={(u) => u.id}
-        searchPlaceholder="Поиск по имени, email или школе..."
+        searchPlaceholder="Поиск по имени или email…"
         searchValue={search}
         onSearchChange={setSearch}
         filters={filters}
-        selectable
-        selectedIds={selectedIds}
-        onSelectionChange={setSelectedIds}
+        pageSize={25}
         onRowClick={(u) => onNavigate(`/admin/users/${u.id}`)}
+        emptyMessage={loading ? 'Загрузка…' : 'Учеников не найдено'}
+        emptySubtitle={debounced || statusFilter !== 'all' ? 'Измените поиск или фильтр' : 'Ученики появятся после регистрации в QazMind Web'}
       />
 
-      {/* Confirmation Dialog */}
+      {pages > 1 && (
+        <div className="flex items-center justify-end gap-2 text-xs">
+          <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="px-2.5 py-1 border border-[#E2DED5] rounded bg-white disabled:opacity-40 cursor-pointer">
+            Назад
+          </button>
+          <span>
+            Страница {page} из {pages}
+          </span>
+          <button disabled={page >= pages} onClick={() => setPage(page + 1)} className="px-2.5 py-1 border border-[#E2DED5] rounded bg-white disabled:opacity-40 cursor-pointer">
+            Далее
+          </button>
+        </div>
+      )}
+
       <ConfirmationDialog
-        isOpen={confirmDialog.open}
-        title={
-          confirmDialog.action === 'suspend'
-            ? `Блокировка аккаунта: ${confirmDialog.user?.name}`
-            : `Активация аккаунта: ${confirmDialog.user?.name}`
-        }
+        isOpen={dialog !== null}
+        title={dialog?.next === 'disabled' ? `Заблокировать: ${dialog?.user.name}` : `Разблокировать: ${dialog?.user.name}`}
         message={
-          confirmDialog.action === 'suspend'
-            ? 'Пользователь временно потеряет возможность проходить тестирование ЕНТ и сдавать задания преподавателя. Действие обратимо.'
-            : 'Пользователь получит полный доступ к образовательному порталу и сдаче экзаменов.'
+          dialog?.next === 'disabled'
+            ? 'Ученик не сможет войти, его текущие сессии завершатся. Действие обратимо и записывается в журнал.'
+            : 'Ученик снова сможет войти в QazMind Web.'
         }
-        variant={confirmDialog.action === 'suspend' ? 'danger' : 'primary'}
-        confirmLabel={confirmDialog.action === 'suspend' ? 'Заблокировать доступ' : 'Активировать'}
-        onConfirm={handleConfirmAction}
-        onCancel={() => setConfirmDialog({ open: false })}
-      />
+        variant={dialog?.next === 'disabled' ? 'danger' : 'primary'}
+        confirmLabel={dialog?.next === 'disabled' ? 'Заблокировать' : 'Разблокировать'}
+        confirmDisabled={reason.trim().length < 3}
+        onConfirm={() => void confirmStatus()}
+        onCancel={() => {
+          setDialog(null);
+          setReason('');
+        }}
+      >
+        <textarea
+          rows={2}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Причина (видна в журнале аудита)"
+          className="w-full text-xs p-2.5 bg-white border border-[#E2DED5] rounded-md text-[#171717]"
+        />
+      </ConfirmationDialog>
 
-      {/* Export Modal */}
       <ExportDialog
         isOpen={exportOpen}
-        title="Экспорт списка пользователей"
+        title="Экспорт списка учеников"
         itemCount={users.length}
         onClose={() => setExportOpen(false)}
         onExport={handleExport}

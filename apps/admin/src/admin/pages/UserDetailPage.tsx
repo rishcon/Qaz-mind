@@ -1,142 +1,115 @@
 import React, { useState } from 'react';
-import { ArrowLeft, User, GraduationCap, Building2, Activity, Shield, RotateCcw } from 'lucide-react';
-import { adminService, ADMIN_API_CONNECTED } from '../services/adminService';
+import { ArrowLeft, User, GraduationCap, Shield, RotateCcw } from 'lucide-react';
+import { adminApi } from '../api/client';
+import { runAction, useAdminData } from '../api/useAdminData';
+import { useStaff } from '../auth/StaffAuth';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { ConfirmationDialog } from '../components/ui/ConfirmationDialog';
-import { ActionResultNotice, failureResult, type ActionResult } from '../components/ui/ConnectionNotice';
-import type { UserAccountType } from '../types';
+import { ActionResultNotice, type ActionResult } from '../components/ui/ConnectionNotice';
+import { ErrorBlock, LoadingBlock, fmtDate } from '../components/ui/PageState';
 
 interface UserDetailPageProps {
   userId: string;
   onNavigate: (path: string) => void;
 }
 
-const ROLE_TITLES: Record<UserAccountType, string> = {
-  student: 'Ученик',
-  teacher: 'Преподаватель',
-  school_admin: 'Администратор школы',
-  platform_admin: 'Администратор платформы',
-};
+const PERIODS: Record<string, string> = { june_main: 'Июнь (основной)', march_paid: 'Март (платный)', ent_2027: 'ЕНТ 2027' };
+const STATES: Record<string, string> = { in_progress: 'В процессе', completed: 'Завершён', not_started: 'Не начат' };
 
-/** Shows a number when the server sent it. A missing value is a dash, never zero. */
-const valueOrDash = (value: number | undefined, suffix = '') => (value === undefined ? '—' : `${value}${suffix}`);
+const Row: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
+  <div className="py-2.5 flex justify-between gap-4">
+    <span className="text-[#78716C]">{label}</span>
+    <span className="font-semibold text-[#171717] text-right">{value}</span>
+  </div>
+);
 
 export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNavigate }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'learning' | 'org' | 'activity' | 'security'>('overview');
-  const [confirmSuspendOpen, setConfirmSuspendOpen] = useState(false);
+  const { can } = useStaff();
+  const [tab, setTab] = useState<'overview' | 'learning' | 'security'>('overview');
   const [result, setResult] = useState<ActionResult | null>(null);
-
-  const user = adminService.getUserById(userId);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const { data: user, error, loading, reload } = useAdminData(() => adminApi.user(userId), [userId], 30000);
 
   if (!user) {
-    return (
-      <div className="bg-white rounded-xl border border-[#E2DED5] p-12 text-center">
-        <h2 className="text-base font-bold text-[#171717]">
-          {ADMIN_API_CONNECTED ? 'Пользователь не найден' : 'Данные не загружены'}
-        </h2>
-        <p className="text-xs text-[#78716C] mt-1">
-          {ADMIN_API_CONNECTED
-            ? `ID #${userId} отсутствует в базе данных.`
-            : `Сервер администрирования не подключён: карточка ID #${userId} недоступна.`}
-        </p>
-        <button
-          onClick={() => onNavigate('/admin/users')}
-          className="mt-4 px-4 py-2 bg-[#FF5A36] text-white text-xs font-semibold rounded-md"
-        >
-          Вернуться к списку
+    return loading ? <LoadingBlock /> : (
+      <div className="space-y-4">
+        <ErrorBlock text={error ?? ''} onRetry={reload} />
+        <button onClick={() => onNavigate('/admin/users')} className="text-xs text-[#FF5A36] hover:underline cursor-pointer">
+          ← К списку учеников
         </button>
       </div>
     );
   }
 
-  const handleRevokeSessions = () => {
-    try {
-      adminService.revokeUserSessions(user.id);
-      setResult({ tone: 'success', text: 'Сессии пользователя завершены.' });
-    } catch (error) {
-      setResult(failureResult(error));
-    }
+  const blocked = user.status === 'disabled';
+
+  const toggleStatus = async () => {
+    const ok = await runAction(
+      () => adminApi.setUserStatus(user.id, blocked ? 'active' : 'disabled', reason.trim()),
+      blocked ? 'Доступ восстановлен.' : 'Доступ приостановлен, сессии завершены.',
+      setResult,
+    );
+    setDialogOpen(false);
+    setReason('');
+    if (ok) reload();
   };
 
-  const handleToggleSuspend = () => {
-    const nextStatus = user.status === 'suspended' ? 'active' : 'suspended';
-    setConfirmSuspendOpen(false);
-    try {
-      adminService.updateUserStatus(user.id, nextStatus);
-      setResult({ tone: 'success', text: nextStatus === 'active' ? 'Доступ восстановлен.' : 'Доступ приостановлен.' });
-    } catch (error) {
-      setResult(failureResult(error));
-    }
+  const revoke = async () => {
+    if (await runAction(() => adminApi.revokeUserSessions(user.id), 'Все сессии ученика завершены.', setResult)) reload();
   };
-
-  // Scoped activity for this user
-  const userActivities = adminService.getUserActivity({ userId: user.id });
 
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
-      {/* Header Profile Summary */}
       <div className="bg-white rounded-xl border border-[#E2DED5] p-6 shadow-xs">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => onNavigate('/admin/users')}
-              className="p-1.5 rounded-md hover:bg-[#F5F3EE] text-[#78716C] cursor-pointer"
-            >
+            <button onClick={() => onNavigate('/admin/users')} className="p-1.5 rounded-md hover:bg-[#F5F3EE] cursor-pointer">
               <ArrowLeft className="w-5 h-5 text-[#171717]" />
             </button>
-
             <div className="w-12 h-12 rounded-full bg-[#FFF7F5] border border-[#FF5A36]/30 flex items-center justify-center font-bold text-base text-[#FF5A36]">
               {user.name.slice(0, 2).toUpperCase()}
             </div>
-
             <div>
               <div className="flex items-center gap-2.5">
                 <h1 className="text-lg font-bold text-[#171717]">{user.name}</h1>
-                <StatusBadge status={user.status} />
+                {blocked ? <StatusBadge status="disabled" label="Заблокирован" /> : <StatusBadge status="active" />}
               </div>
               <p className="text-xs text-[#78716C] mt-0.5">
-                {user.email} • ID: <span className="font-mono">{user.id}</span> • {user.city ?? '—'}
+                {user.email} • ID: <span className="font-mono">{user.id}</span>
               </p>
             </div>
           </div>
-
-          <div className="flex items-center gap-2">
+          {can('users.suspend') && (
             <button
-              onClick={() => setConfirmSuspendOpen(true)}
-              className={`px-3.5 py-1.5 text-xs font-semibold rounded-md border transition-colors cursor-pointer ${
-                user.status === 'suspended'
-                  ? 'border-[#258568] bg-[#EBF7F2] text-[#258568] hover:bg-[#DDF2E9]'
-                  : 'border-[#FCA5A5] bg-[#FFF1F2] text-[#C94A43] hover:bg-[#FFE4E6]'
+              onClick={() => setDialogOpen(true)}
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-md border cursor-pointer ${
+                blocked
+                  ? 'border-[#258568] bg-[#EBF7F2] text-[#258568]'
+                  : 'border-[#FCA5A5] bg-[#FFF1F2] text-[#C94A43]'
               }`}
             >
-              {user.status === 'suspended' ? 'Восстановить аккаунт' : 'Приостановить доступ'}
+              {blocked ? 'Разблокировать' : 'Заблокировать'}
             </button>
-          </div>
+          )}
         </div>
 
-        {/* Tab Navigation */}
         <div className="flex items-center gap-1 border-t border-[#E2DED5] mt-6 pt-2 overflow-x-auto">
           {[
-            { id: 'overview', label: 'Обзор', icon: User },
-            { id: 'learning', label: 'Обучение и ЕНТ', icon: GraduationCap },
-            { id: 'org', label: 'Организации', icon: Building2 },
-            { id: 'activity', label: 'История действий', icon: Activity },
-            { id: 'security', label: 'Безопасность', icon: Shield },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isCurrent = activeTab === tab.id;
+            { id: 'overview', label: 'Профиль', icon: User },
+            { id: 'learning', label: `Уроки (${user.progress.length})`, icon: GraduationCap },
+            { id: 'security', label: 'Сессии и безопасность', icon: Shield },
+          ].map((t) => {
+            const Icon = t.icon;
             return (
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
-                  isCurrent
-                    ? 'bg-[#171717] text-white shadow-xs'
-                    : 'text-[#78716C] hover:bg-[#F5F3EE] hover:text-[#171717]'
+                key={t.id}
+                onClick={() => setTab(t.id as typeof tab)}
+                className={`flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-md cursor-pointer ${
+                  tab === t.id ? 'bg-[#171717] text-white' : 'text-[#78716C] hover:bg-[#F5F3EE]'
                 }`}
               >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{tab.label}</span>
+                <Icon className="w-3.5 h-3.5" /> {t.label}
               </button>
             );
           })}
@@ -145,203 +118,121 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
 
       <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
 
-      {/* TAB 1: OVERVIEW */}
-      {activeTab === 'overview' && (
+      {tab === 'overview' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white rounded-xl border border-[#E2DED5] p-5 space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-[#171717]">
-              Учетная карточка пользователя
-            </h3>
+          <div className="bg-white rounded-xl border border-[#E2DED5] p-5">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#171717] mb-2">Учётная запись</h3>
             <div className="divide-y divide-[#E2DED5] text-xs">
-              <div className="py-2.5 flex justify-between">
-                <span className="text-[#78716C]">Полное имя:</span>
-                <span className="font-semibold text-[#171717]">{user.name}</span>
-              </div>
-              <div className="py-2.5 flex justify-between">
-                <span className="text-[#78716C]">Email:</span>
-                <span className="font-mono text-[#171717]">{user.email}</span>
-              </div>
-              <div className="py-2.5 flex justify-between">
-                <span className="text-[#78716C]">Телефон:</span>
-                <span className="font-mono text-[#171717]">{user.phone ?? '—'}</span>
-              </div>
-              <div className="py-2.5 flex justify-between">
-                <span className="text-[#78716C]">Тип аккаунта:</span>
-                <span className="font-semibold text-[#FF5A36]">{ROLE_TITLES[user.role]}</span>
-              </div>
-              <div className="py-2.5 flex justify-between">
-                <span className="text-[#78716C]">Дата регистрации:</span>
-                <span className="font-mono text-[#171717]">
-                  {new Date(user.registeredAt).toLocaleDateString('ru-RU')}
-                </span>
-              </div>
+              <Row label="Email" value={<span className="font-mono">{user.email}</span>} />
+              <Row label="Email подтверждён" value={user.email_verified ? 'да' : 'нет'} />
+              <Row label="Регистрация" value={fmtDate(user.created_at, true)} />
+              <Row label="Последняя активность" value={fmtDate(user.last_seen_at, true)} />
+              <Row label="Временная блокировка входа" value={user.locked_until ? `до ${fmtDate(user.locked_until, true)}` : 'нет'} />
             </div>
           </div>
-
-          <div className="bg-white rounded-xl border border-[#E2DED5] p-5 space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-[#171717]">
-              Академические цели и профиль
-            </h3>
-            {user.role === 'student' ? (
+          <div className="bg-white rounded-xl border border-[#E2DED5] p-5">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#171717] mb-2">Профиль подготовки</h3>
+            {user.profile ? (
               <div className="divide-y divide-[#E2DED5] text-xs">
-                <div className="py-2.5 flex justify-between">
-                  <span className="text-[#78716C]">Целевой балл ЕНТ:</span>
-                  <span className="font-bold text-[#FF5A36] text-sm">
-                    {user.targetEntScore !== undefined ? `${user.targetEntScore} / 140` : 'не указана'}
-                  </span>
-                </div>
-                <div className="py-2.5 flex justify-between">
-                  <span className="text-[#78716C]">Средний результат срезов:</span>
-                  <span className="font-bold text-[#258568]">{valueOrDash(user.averageScore, ' баллов')}</span>
-                </div>
-                <div className="py-2.5 flex justify-between">
-                  <span className="text-[#78716C]">Пройдено уроков:</span>
-                  <span className="font-semibold text-[#171717]">{valueOrDash(user.completedLessonsCount, ' тем')}</span>
-                </div>
-                <div className="py-2.5 flex justify-between">
-                  <span className="text-[#78716C]">Попыток сдачи ЕНТ:</span>
-                  <span className="font-semibold text-[#171717]">{valueOrDash(user.examAttemptsCount)}</span>
-                </div>
+                <Row label="Целевой балл" value={`${user.profile.target_score} / 140`} />
+                <Row label="Профильная пара" value={user.profile.profile_pair} />
+                <Row label="Экзамен" value={`${PERIODS[user.profile.exam_period] ?? user.profile.exam_period}, ${user.profile.exam_year}`} />
+                <Row label="Язык экзамена" value={user.profile.exam_lang === 'kz' ? 'Казахский' : 'Русский'} />
+                <Row label="Время в день" value={`${user.profile.daily_goal_minutes} мин`} />
+                <Row label="Онбординг пройден" value={fmtDate(user.profile.onboarding_completed_at, true)} />
               </div>
             ) : (
-              <div className="p-4 bg-[#FAF9F6] rounded-lg text-xs text-[#78716C]">
-                Преподавательский аккаунт. Доступны функции создания домашних заданий, проверки контрольных срезов и управления классами.
-              </div>
+              <p className="text-xs text-[#78716C] py-4">Ученик ещё не прошёл онбординг.</p>
             )}
           </div>
         </div>
       )}
 
-      {/* TAB 2: LEARNING */}
-      {activeTab === 'learning' && (
-        <div className="bg-white rounded-xl border border-[#E2DED5] p-5 space-y-4">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-[#171717]">
-            История образовательного прогресса и попыток сдачи
+      {tab === 'learning' && (
+        <div className="bg-white rounded-xl border border-[#E2DED5] p-5">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-[#171717] mb-3">
+            Прогресс по урокам · завершено {user.lessons_completed}
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="p-4 rounded-lg bg-[#FAF9F6] border border-[#E2DED5] text-xs">
-              <div className="text-[#78716C]">Всего завершено уроков</div>
-              <div className="text-xl font-bold text-[#171717] mt-1">{valueOrDash(user.completedLessonsCount)}</div>
-            </div>
-            <div className="p-4 rounded-lg bg-[#FAF9F6] border border-[#E2DED5] text-xs">
-              <div className="text-[#78716C]">Практических сессий</div>
-              <div className="text-xl font-bold text-[#171717] mt-1">{valueOrDash(user.practiceAttemptsCount)}</div>
-            </div>
-            <div className="p-4 rounded-lg bg-[#EBF7F2] border border-[#258568]/20 text-xs">
-              <div className="text-[#1D6A53]">Средний балл на срезах ЕНТ</div>
-              <div className="text-xl font-bold text-[#258568] mt-1">
-                {user.averageScore !== undefined ? `${user.averageScore} из 140` : 'нет данных'}
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-2">
-            <h4 className="text-xs font-semibold text-[#171717] mb-2">Недавние сдачи пробных экзаменов</h4>
-            <div className="divide-y divide-[#E2DED5] border border-[#E2DED5] rounded-lg overflow-hidden text-xs">
-              <div className="p-3 bg-[#FCFBF9] text-[#78716C]">
-                {ADMIN_API_CONNECTED
-                  ? 'Пробных экзаменов пока нет.'
-                  : 'Список сданных пробных экзаменов не загружен: сервер администрирования не подключён.'}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 3: ORGANIZATIONS */}
-      {activeTab === 'org' && (
-        <div className="bg-white rounded-xl border border-[#E2DED5] p-5 space-y-4">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-[#171717]">
-            Привязка к учебным заведениям и классам
-          </h3>
-          {user.organizationName ? (
-            <div className="p-4 rounded-lg border border-[#E2DED5] bg-[#FAF9F6] flex items-center justify-between">
-              <div>
-                <div className="text-sm font-bold text-[#171717]">{user.organizationName}</div>
-                <div className="text-xs text-[#78716C] mt-0.5">
-                  ID школы: {user.organizationId} • Город: {user.city ?? '—'}
-                </div>
-              </div>
-              <button
-                onClick={() => user.organizationId && onNavigate(`/admin/schools/${user.organizationId}`)}
-                className="px-3 py-1.5 text-xs text-[#171717] bg-white border border-[#E2DED5] rounded hover:bg-[#F5F3EE] cursor-pointer"
-              >
-                Открыть профиль школы →
-              </button>
-            </div>
+          {user.progress.length === 0 ? (
+            <p className="text-xs text-[#78716C]">Ученик ещё не открывал уроки.</p>
           ) : (
-            <p className="text-xs text-[#78716C]">Пользователь обучается индивидуально без привязки к школе.</p>
+            <div className="divide-y divide-[#E2DED5] text-xs">
+              {user.progress.map((p) => (
+                <div key={p.lesson_slug} className="py-2.5 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="font-semibold text-[#171717]">{p.title}</div>
+                    <div className="text-[11px] text-[#78716C] font-mono">{p.lesson_slug} · шаг {p.last_step + 1}</div>
+                  </div>
+                  <div className="text-right">
+                    <StatusBadge status={p.state === 'completed' ? 'published' : 'in_review'} label={STATES[p.state] ?? p.state} />
+                    <div className="text-[10px] text-[#A8A29E] mt-1">{fmtDate(p.updated_at, true)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
 
-      {/* TAB 4: ACTIVITY */}
-      {activeTab === 'activity' && (
-        <div className="bg-white rounded-xl border border-[#E2DED5] p-5 space-y-3">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-[#171717]">
-            Журнал пользовательских действий
-          </h3>
-          <div className="divide-y divide-[#E2DED5] text-xs">
-            {userActivities.length === 0 ? (
-              <p className="py-4 text-[#78716C]">Нет зарегистрированных событий за выбранный период.</p>
-            ) : (
-              userActivities.map((act) => (
-                <div key={act.id} className="py-2.5 flex items-center justify-between">
-                  <div>
-                    <span className="font-semibold text-[#171717]">{act.eventType}</span>
-                    <span className="text-[#78716C] ml-2">{act.resourceName}</span>
-                  </div>
-                  <span className="text-[11px] font-mono text-[#A8A29E]">
-                    {new Date(act.timestamp).toLocaleTimeString('ru-RU')}
-                  </span>
-                </div>
-              ))
+      {tab === 'security' && (
+        <div className="bg-white rounded-xl border border-[#E2DED5] p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#171717]">
+              Сессии входа · активных {user.active_sessions}
+            </h3>
+            {can('users.suspend') && (
+              <button
+                onClick={() => void revoke()}
+                className="px-3 py-1.5 text-xs font-medium text-[#171717] bg-white border border-[#E2DED5] rounded hover:bg-[#F5F3EE] flex items-center gap-1.5 cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-[#FF5A36]" /> Завершить все сессии
+              </button>
             )}
           </div>
+          {user.sessions.length === 0 ? (
+            <p className="text-xs text-[#78716C]">Сессий нет.</p>
+          ) : (
+            <table className="w-full text-xs text-left">
+              <thead>
+                <tr className="text-[#78716C] border-b border-[#E2DED5]">
+                  <th className="py-2">Создана</th>
+                  <th className="py-2">Последняя активность</th>
+                  <th className="py-2">Истекает</th>
+                  <th className="py-2">Состояние</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#E2DED5]">
+                {user.sessions.map((s, i) => (
+                  <tr key={i}>
+                    <td className="py-2 font-mono">{fmtDate(s.created_at, true)}</td>
+                    <td className="py-2 font-mono">{fmtDate(s.last_seen_at, true)}</td>
+                    <td className="py-2 font-mono">{fmtDate(s.expires_at, true)}</td>
+                    <td className="py-2">{s.revoked ? 'завершена' : new Date(s.expires_at) > new Date() ? 'активна' : 'истекла'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
 
-      {/* TAB 5: SECURITY */}
-      {activeTab === 'security' && (
-        <div className="bg-white rounded-xl border border-[#E2DED5] p-5 space-y-5 max-w-2xl">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-[#171717]">
-            Параметры безопасности и активных сессий
-          </h3>
-
-          <div className="divide-y divide-[#E2DED5] text-xs">
-            <div className="py-3 flex justify-between items-center">
-              <div>
-                <div className="font-semibold text-[#171717]">Статус верификации Email</div>
-                <div className="text-[#78716C]">{user.emailVerified ? 'Почта подтверждена' : 'Почта не подтверждена'}</div>
-              </div>
-              <StatusBadge status={user.emailVerified ? 'active' : 'pending'} label={user.emailVerified ? 'Подтвержден' : 'Не подтвержден'} />
-            </div>
-
-            <div className="py-3 flex justify-between items-center">
-              <div>
-                <div className="font-semibold text-[#171717]">Сброс активных сессий</div>
-                <div className="text-[#78716C]">Завершить все авторизованные сеансы на всех устройствах пользователя</div>
-              </div>
-              <button
-                onClick={handleRevokeSessions}
-                className="px-3 py-1.5 text-xs font-medium text-[#171717] bg-white border border-[#E2DED5] rounded hover:bg-[#F5F3EE] flex items-center gap-1.5 cursor-pointer shadow-2xs"
-              >
-                <RotateCcw className="w-3.5 h-3.5 text-[#FF5A36]" /> Отозвать сессии
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Confirmation Dialog for Suspension */}
       <ConfirmationDialog
-        isOpen={confirmSuspendOpen}
-        title={user.status === 'suspended' ? 'Восстановление аккаунта' : 'Блокировка аккаунта'}
-        message={`Вы уверены, что хотите ${user.status === 'suspended' ? 'разблокировать' : 'приостановить доступ для'} ${user.name}?`}
-        variant={user.status === 'suspended' ? 'primary' : 'danger'}
-        onConfirm={handleToggleSuspend}
-        onCancel={() => setConfirmSuspendOpen(false)}
-      />
+        isOpen={dialogOpen}
+        title={blocked ? 'Разблокировать ученика' : 'Заблокировать ученика'}
+        message={blocked ? 'Ученик снова сможет входить.' : 'Ученик не сможет входить, текущие сессии завершатся.'}
+        variant={blocked ? 'primary' : 'danger'}
+        confirmDisabled={reason.trim().length < 3}
+        onConfirm={() => void toggleStatus()}
+        onCancel={() => setDialogOpen(false)}
+      >
+        <textarea
+          rows={2}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Причина (видна в журнале аудита)"
+          className="w-full text-xs p-2.5 bg-white border border-[#E2DED5] rounded-md"
+        />
+      </ConfirmationDialog>
     </div>
   );
 };

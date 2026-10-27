@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Upload, AlertTriangle, ArrowRight, ArrowLeft, Download, Check } from 'lucide-react';
-import { adminService } from '../../services/adminService';
-import { ActionResultNotice, failureResult, type ActionResult } from '../ui/ConnectionNotice';
-import { parseQuestionCsv, QUESTION_CSV_HEADER, type QuestionCsvResult } from '../../utils/questionCsv';
+import { adminApi, errorText, QuestionBody } from '../../api/client';
+import { useAdminData } from '../../api/useAdminData';
+import { ActionResultNotice, type ActionResult } from '../ui/ConnectionNotice';
+import { parseQuestionCsv, QUESTION_CSV_HEADER, type ImportedQuestionRow, type QuestionCsvResult } from '../../utils/questionCsv';
 
 interface ImportWizardProps {
   onDone: () => void;
@@ -20,8 +21,29 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
   const [parsed, setParsed] = useState<QuestionCsvResult | null>(null);
   const [result, setResult] = useState<ActionResult | null>(null);
 
-  // Subject codes and IDs from the reference list. While the list is not loaded, the import is blocked.
-  const knownSubjectCodes = adminService.getSubjects().flatMap((subject) => [subject.code, subject.id]);
+  // Subject codes and IDs from the server catalog. While the list is not loaded, the import is blocked.
+  const subjects = useAdminData(() => adminApi.subjects(), []);
+  const catalog = subjects.data?.items ?? [];
+  const knownSubjectCodes = catalog.flatMap((subject) => [subject.code, subject.id]);
+  const [importing, setImporting] = useState(false);
+
+  const toBody = (row: ImportedQuestionRow): QuestionBody => {
+    const subject = catalog.find((s) => s.id === row.subjectCode || s.code === row.subjectCode)!;
+    return {
+      subject_id: subject.id,
+      topic_id: null,
+      difficulty: row.difficulty,
+      points: 1,
+      text_ru: row.textRu,
+      text_kz: '',
+      options: row.options.map((o) => ({ label: o.label, text_ru: o.textRu, text_kz: '' })),
+      correct_label: row.correctLabel,
+      explanation_ru: row.explanationRu,
+      explanation_kz: '',
+      source_reference: '',
+      external_id: row.externalId,
+    };
+  };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -49,13 +71,16 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
   };
 
   // A refused import keeps the preview on screen; the step changes only when the server accepts the rows.
-  const handleImport = () => {
+  const handleImport = async () => {
     if (!parsed || parsed.rows.length === 0) return;
+    setImporting(true);
     try {
-      adminService.importQuestions(parsed.rows);
+      await adminApi.importQuestions(parsed.rows.map(toBody));
       setStep(4);
     } catch (error) {
-      setResult(failureResult(error));
+      setResult({ tone: 'error', text: errorText(error) });
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -276,10 +301,11 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
               Назад
             </button>
             <button
-              onClick={handleImport}
+              onClick={() => void handleImport()}
+              disabled={importing}
               className="px-4 py-1.5 text-xs font-semibold text-white bg-[#258568] hover:bg-[#1D6A53] rounded-md flex items-center gap-1.5 cursor-pointer shadow-xs"
             >
-              Импортировать в банк <Check className="w-4 h-4" />
+              {importing ? 'Импорт…' : 'Импортировать в банк'} <Check className="w-4 h-4" />
             </button>
           </div>
         </div>

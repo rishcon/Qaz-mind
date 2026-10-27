@@ -1,275 +1,216 @@
 import React, { useState } from 'react';
-import {
-  FileCheck2,
-  AlertTriangle,
-  XCircle,
-  HelpCircle,
-  MessageSquare,
-  Check,
-  X,
-  Eye,
-  BookOpen,
-} from 'lucide-react';
-import { QuestionItem } from '../types';
-import { adminService, ADMIN_API_CONNECTED } from '../services/adminService';
+import { BookOpen, Check, Eye } from 'lucide-react';
+import { adminApi, Question, WorkflowAction } from '../api/client';
+import { runAction, useAdminData } from '../api/useAdminData';
+import { useAttention } from '../api/AttentionProvider';
+import { DIFFICULTY_LABELS, STATUS_LABELS } from '../api/labels';
+import { useStaff } from '../auth/StaffAuth';
 import { StatusBadge } from '../components/ui/StatusBadge';
-import { ActionResultNotice, failureResult, type ActionResult } from '../components/ui/ConnectionNotice';
-
-/** null means "not loaded": shown as a dash, never as zero. */
-const num = (value: number | null) => (value === null ? '—' : String(value));
+import { ActionResultNotice, type ActionResult } from '../components/ui/ConnectionNotice';
+import { ErrorBlock, fmtDate } from '../components/ui/PageState';
 
 interface QuestionReviewPageProps {
   onNavigate: (path: string) => void;
 }
 
+/** Review queue. The author of a question cannot approve or publish it: the server refuses, the buttons say why. */
 export const QuestionReviewPage: React.FC<QuestionReviewPageProps> = ({ onNavigate }) => {
-  const [selectedQuestionId, setSelectedQuestionId] = useState<string>('');
-  const [reviewerNotes, setReviewerNotes] = useState('');
+  const { can, session } = useStaff();
+  const attention = useAttention();
+  const [queue, setQueue] = useState<'in_review' | 'approved'>('in_review');
+  const [selectedId, setSelectedId] = useState('');
+  const [notes, setNotes] = useState('');
   const [result, setResult] = useState<ActionResult | null>(null);
+  const overview = useAdminData(() => adminApi.overview(), [], 30000);
+  const list = useAdminData(() => adminApi.questions({ status: queue, page_size: 200 }), [queue], 30000);
+  const subjects = useAdminData(() => adminApi.subjects(), []);
+  const items = list.data?.items ?? [];
+  const selected: Question | undefined = items.find((q) => q.id === selectedId) ?? items[0];
+  const own = selected?.author === session?.staff.email;
+  const subjectName = (id: string) => subjects.data?.items.find((s) => s.id === id)?.title_ru ?? id;
 
-  const questions = adminService.getQuestions();
-  const reviewQueue = questions.filter(
-    (q) => q.status === 'in_review' || q.status === 'draft' || q.status === 'changes_requested'
-  );
-
-  const selectedQuestion =
-    reviewQueue.find((q) => q.id === selectedQuestionId) || reviewQueue[0];
-
-  // Quality metrics: computed only from loaded data; without the server they are not loaded.
-  const queueCount = ADMIN_API_CONNECTED ? reviewQueue.length : null;
-  const missingExplanations = ADMIN_API_CONNECTED
-    ? questions.filter((q) => !q.explanationRu || q.explanationRu.length < 10).length
-    : null;
-  const missingKz = ADMIN_API_CONNECTED ? questions.filter((q) => !q.textKz || q.textKz.length < 5).length : null;
-  const reportedCount = adminService.getCounters().pendingReports;
-
-  // Publication goes through approval first (lifecycle: in_review -> approved -> published), so there is no direct publish.
-  const handleReviewAction = (action: 'approve' | 'request_changes' | 'reject') => {
-    if (!selectedQuestion) return;
-    try {
-      adminService.reviewQuestion(selectedQuestion.id, action, reviewerNotes);
-      setReviewerNotes('');
-      const actionLabel =
-        action === 'approve'
-          ? 'Вопрос утверждён.'
-          : action === 'request_changes'
-          ? 'Замечания отправлены автору.'
-          : 'Вопрос отклонён.';
-      setResult({ tone: 'success', text: actionLabel });
-    } catch (error) {
-      setResult(failureResult(error));
+  const act = async (action: WorkflowAction, text: string) => {
+    if (!selected) return;
+    if (await runAction(() => adminApi.questionTransition(selected.id, action, notes), text, setResult)) {
+      setNotes('');
+      setSelectedId('');
+      list.reload();
+      overview.reload();
+      attention.reload();
     }
   };
 
+  const counts = overview.data?.questions;
+
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
-      {/* Header */}
       <div className="pb-2 border-b border-[#E2DED5]">
-        <h1 className="text-xl font-bold text-[#171717]">
-          Модерация и контроль качества контента ЕНТ
-        </h1>
+        <h1 className="text-xl font-bold text-[#171717]">Модерация вопросов</h1>
         <p className="text-xs text-[#78716C] mt-0.5">
-          Экспертная рецензия методистов, проверка формулировок, валидация ключей и работа с замечаниями.
+          Рецензент проверяет формулировку, ключ и пояснение. Автор не может утверждать и публиковать свои вопросы.
         </p>
       </div>
 
-      {/* Quality KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
-        <div className="bg-white p-4 rounded-xl border border-[#E2DED5]">
-          <span className="text-xs text-[#78716C]">На рецензировании</span>
-          <div className="text-xl font-bold text-[#FF5A36] mt-1">{num(queueCount)}</div>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-[#E2DED5]">
-          <span className="text-xs text-[#78716C]">Жалобы учащихся</span>
-          <div className="text-xl font-bold text-[#C94A43] mt-1">{num(reportedCount)}</div>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-[#E2DED5]">
-          <span className="text-xs text-[#78716C]">Без перевода (KZ)</span>
-          <div className="text-xl font-bold text-[#D89B35] mt-1">{num(missingKz)}</div>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-[#E2DED5]">
-          <span className="text-xs text-[#78716C]">Без пояснений</span>
-          <div className="text-xl font-bold text-[#171717] mt-1">{num(missingExplanations)}</div>
-        </div>
+        {[
+          { label: 'На рецензии', value: counts?.in_review, color: 'text-[#FF5A36]' },
+          { label: 'Ждут публикации', value: counts?.approved, color: 'text-[#D89B35]' },
+          { label: 'Опубликовано', value: counts?.published, color: 'text-[#258568]' },
+          { label: 'Черновики', value: counts?.draft, color: 'text-[#171717]' },
+        ].map((card) => (
+          <div key={card.label} className="bg-white p-4 rounded-xl border border-[#E2DED5]">
+            <span className="text-xs text-[#78716C]">{card.label}</span>
+            <div className={`text-xl font-bold mt-1 ${card.color}`}>{card.value ?? '—'}</div>
+          </div>
+        ))}
       </div>
 
       <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
+      {list.error && <ErrorBlock text={list.error} onRetry={list.reload} />}
 
-      {/* Main Review Split View */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Review Queue */}
         <div className="bg-white rounded-xl border border-[#E2DED5] p-4 space-y-2">
-          <div className="flex items-center justify-between pb-2 border-b border-[#E2DED5]">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-[#78716C]">
-              Очередь на проверку ({num(queueCount)})
-            </h2>
+          <div className="flex items-center gap-1 bg-[#FAF9F6] p-1 rounded-lg border border-[#E2DED5] text-xs">
+            {(['in_review', 'approved'] as const).map((value) => (
+              <button
+                key={value}
+                onClick={() => {
+                  setQueue(value);
+                  setSelectedId('');
+                }}
+                className={`flex-1 px-2 py-1 rounded-md font-semibold cursor-pointer ${queue === value ? 'bg-white shadow-xs text-[#171717]' : 'text-[#78716C]'}`}
+              >
+                {value === 'in_review' ? 'На рецензии' : 'Ждут публикации'}
+              </button>
+            ))}
           </div>
-
-          <div className="space-y-1.5 max-h-[550px] overflow-y-auto pr-1">
-            {reviewQueue.length === 0 ? (
-              <div className="p-6 text-center text-xs text-[#78716C]">
-                {ADMIN_API_CONNECTED ? 'В очереди нет вопросов.' : 'Очередь не загружена: сервер администрирования не подключён.'}
-              </div>
+          <div className="space-y-1.5 max-h-[560px] overflow-y-auto pr-1">
+            {items.length === 0 ? (
+              <div className="p-6 text-center text-xs text-[#78716C]">{list.loading ? 'Загрузка…' : 'Очередь пуста.'}</div>
             ) : (
-              reviewQueue.map((q) => {
-                const isSelected = q.id === selectedQuestion?.id;
-                return (
-                  <div
-                    key={q.id}
-                    onClick={() => setSelectedQuestionId(q.id)}
-                    className={`p-3 rounded-lg border text-left cursor-pointer transition-all ${
-                      isSelected
-                        ? 'border-[#FF5A36] bg-[#FFF7F5] shadow-xs'
-                        : 'border-[#E2DED5] bg-white hover:bg-[#FAF9F6]'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs font-bold text-[#FF5A36]">{q.id}</span>
-                      <StatusBadge status={q.status} size="sm" />
-                    </div>
-                    <p className="text-xs font-medium text-[#171717] line-clamp-2 mt-1 leading-snug">
-                      {q.textRu}
-                    </p>
-                    <div className="flex items-center justify-between mt-2 text-[10px] text-[#A8A29E]">
-                      <span>{q.sectionName}</span>
-                      <span>Автор: {q.author.split(' ')[0]}</span>
-                    </div>
+              items.map((q) => (
+                <div
+                  key={q.id}
+                  onClick={() => setSelectedId(q.id)}
+                  className={`p-3 rounded-lg border cursor-pointer ${
+                    q.id === selected?.id ? 'border-[#FF5A36] bg-[#FFF7F5]' : 'border-[#E2DED5] hover:bg-[#FAF9F6]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-[10px] text-[#A8A29E]">
+                    <span>{subjectName(q.subject_id)}</span>
+                    <span>{fmtDate(q.updated_at)}</span>
                   </div>
-                );
-              })
+                  <p className="text-xs font-medium text-[#171717] line-clamp-2 mt-1">{q.text_ru}</p>
+                  <div className="text-[10px] text-[#A8A29E] mt-1">Автор: {q.author ?? '—'}</div>
+                </div>
+              ))
             )}
           </div>
         </div>
 
-        {/* Right 2 Columns: Inspection & Decision Card */}
-        <div className="lg:col-span-2 space-y-4">
-          {selectedQuestion ? (
-            <div className="bg-white rounded-xl border border-[#E2DED5] p-6 shadow-xs space-y-5">
+        <div className="lg:col-span-2">
+          {selected ? (
+            <div className="bg-white rounded-xl border border-[#E2DED5] p-6 space-y-5">
               <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#E2DED5]">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-bold text-[#FF5A36]">
-                      #{selectedQuestion.id}
+                    <StatusBadge status={selected.status} label={STATUS_LABELS[selected.status]} />
+                    <span className="text-xs text-[#78716C]">
+                      {subjectName(selected.subject_id)} · {DIFFICULTY_LABELS[selected.difficulty]} · {selected.points} балл.
                     </span>
-                    <StatusBadge status={selectedQuestion.status} />
                   </div>
-                  <p className="text-xs text-[#78716C] mt-0.5">
-                    Раздел: {selectedQuestion.sectionName} • Тип: {selectedQuestion.type} • Баллов: {selectedQuestion.points}
+                  <p className="text-[11px] text-[#A8A29E] mt-1">
+                    Автор {selected.author ?? '—'} · источник: {selected.source_reference || 'не указан'}
                   </p>
                 </div>
-
                 <button
-                  onClick={() => onNavigate(`/admin/content/questions/${selectedQuestion.id}`)}
-                  className="px-3 py-1.5 text-xs font-medium text-[#171717] bg-white border border-[#E2DED5] rounded-md hover:bg-[#F5F3EE] flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  onClick={() => onNavigate(`/admin/content/questions/${selected.id}`)}
+                  className="px-3 py-1.5 text-xs font-medium text-[#171717] bg-white border border-[#E2DED5] rounded-md hover:bg-[#F5F3EE] flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Eye className="w-3.5 h-3.5" /> Открыть полный редактор
+                  <Eye className="w-3.5 h-3.5" /> Открыть
                 </button>
               </div>
 
-              {/* Context passage if present */}
-              {selectedQuestion.contextPassageRu && (
-                <div className="p-4 rounded-lg bg-[#FAF9F6] border border-[#E2DED5] text-xs text-[#5C574F] italic leading-relaxed">
-                  <p className="font-semibold not-italic text-[#171717] mb-1">Фрагмент источника / Контекст:</p>
-                  {selectedQuestion.contextPassageRu}
-                </div>
-              )}
-
-              {/* Question Text */}
               <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-[#78716C] mb-1">
-                  Текст задания (RU):
-                </h3>
-                <p className="text-sm font-semibold text-[#171717] leading-relaxed">
-                  {selectedQuestion.textRu}
-                </p>
-                {selectedQuestion.textKz && (
-                  <p className="text-xs text-[#5C574F] mt-1 italic">KZ: {selectedQuestion.textKz}</p>
-                )}
+                <p className="text-sm font-semibold text-[#171717] leading-relaxed">{selected.text_ru}</p>
+                {selected.text_kz && <p className="text-xs text-[#5C574F] mt-1 italic">KZ: {selected.text_kz}</p>}
               </div>
 
-              {/* Answer Options & Verification */}
-              {selectedQuestion.options && (
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#78716C] mb-2">
-                    Варианты ответа и правильный ключ:
-                  </h3>
-                  <div className="space-y-2">
-                    {selectedQuestion.options.map((opt, i) => (
-                      <div
-                        key={opt.id}
-                        className={`p-3 rounded-lg border flex items-center justify-between text-xs ${
-                          opt.isCorrect
-                            ? 'border-[#258568] bg-[#F4FAF7] text-[#1D6A53] font-semibold'
-                            : 'border-[#E2DED5] bg-white text-[#171717]'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <span
-                            className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
-                              opt.isCorrect
-                                ? 'bg-[#258568] text-white'
-                                : 'border border-[#D5D0C5] text-[#78716C]'
-                            }`}
-                          >
-                            {String.fromCharCode(65 + i)}
-                          </span>
-                          <span>{opt.textRu}</span>
-                        </div>
-                        {opt.isCorrect && (
-                          <span className="text-[11px] font-bold text-[#258568] flex items-center gap-1">
-                            <Check className="w-3.5 h-3.5" /> ВЕРНЫЙ ОТВЕТ
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <div className="space-y-2">
+                {selected.options.map((opt) => {
+                  const correct = opt.label === selected.correct_label;
+                  return (
+                    <div
+                      key={opt.label}
+                      className={`p-3 rounded-lg border flex items-center justify-between text-xs ${
+                        correct ? 'border-[#258568] bg-[#F4FAF7] text-[#1D6A53] font-semibold' : 'border-[#E2DED5]'
+                      }`}
+                    >
+                      <span>
+                        {opt.label}. {opt.text_ru}
+                        {opt.text_kz ? <span className="text-[#A8A29E] font-normal"> / {opt.text_kz}</span> : null}
+                      </span>
+                      {correct && (
+                        <span className="text-[11px] font-bold flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5" /> ВЕРНЫЙ ОТВЕТ
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
 
-              {/* Pedagogical Explanation Check */}
               <div className="p-4 rounded-lg bg-[#FAF9F6] border border-[#E2DED5] text-xs space-y-1.5">
                 <p className="font-bold text-[#171717] flex items-center gap-1.5">
-                  <BookOpen className="w-3.5 h-3.5 text-[#FF5A36]" /> Методическое пояснение:
+                  <BookOpen className="w-3.5 h-3.5 text-[#FF5A36]" /> Пояснение
                 </p>
-                <p className="text-[#5C574F] leading-relaxed">{selectedQuestion.explanationRu}</p>
+                <p className="text-[#5C574F] leading-relaxed">{selected.explanation_ru || 'Пояснения нет.'}</p>
               </div>
 
-              {/* Reviewer Feedback Input */}
-              <div className="space-y-2 pt-2">
-                <label className="text-xs font-bold text-[#171717] block">
-                  Замечания методиста / Комментарий рецензента:
-                </label>
+              {selected.status === 'in_review' && can('content.review') && (
                 <textarea
                   rows={2}
-                  value={reviewerNotes}
-                  onChange={(e) => setReviewerNotes(e.target.value)}
-                  placeholder="Укажите замечания по формулировке, источнику или ключу ответа..."
-                  className="w-full text-xs p-2.5 bg-white border border-[#E2DED5] rounded-md text-[#171717]"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Замечания для автора (обязательны при возврате)"
+                  className="w-full text-xs p-2.5 bg-white border border-[#E2DED5] rounded-md"
                 />
-              </div>
+              )}
 
-              {/* Action Buttons */}
               <div className="pt-4 border-t border-[#E2DED5] flex flex-wrap items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => handleReviewAction('request_changes')}
-                  className="px-3.5 py-1.5 text-xs font-medium text-[#C94A43] bg-white border border-[#FCA5A5] rounded-md hover:bg-[#FFF1F2] cursor-pointer"
-                >
-                  Вернуть на доработку
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleReviewAction('approve')}
-                  className="px-4 py-1.5 text-xs font-semibold text-white bg-[#258568] hover:bg-[#1D6A53] rounded-md flex items-center gap-1.5 cursor-pointer shadow-xs"
-                >
-                  <Check className="w-4 h-4" /> Утвердить вопрос
-                </button>
+                {own && <span className="text-[11px] text-[#9A6715] mr-auto">Это ваш вопрос: утвердить и опубликовать его может только другой сотрудник.</span>}
+                {selected.status === 'in_review' && can('content.review') && (
+                  <>
+                    <button
+                      disabled={!notes.trim()}
+                      onClick={() => void act('return', 'Вопрос возвращён автору.')}
+                      className="px-3.5 py-1.5 text-xs font-medium text-[#C94A43] bg-white border border-[#FCA5A5] rounded-md cursor-pointer disabled:opacity-40"
+                    >
+                      Вернуть на доработку
+                    </button>
+                    <button
+                      disabled={own}
+                      onClick={() => void act('approve', 'Вопрос утверждён.')}
+                      className="px-4 py-1.5 text-xs font-semibold text-white bg-[#258568] hover:bg-[#1D6A53] rounded-md flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
+                    >
+                      <Check className="w-4 h-4" /> Утвердить
+                    </button>
+                  </>
+                )}
+                {selected.status === 'approved' && can('content.publish') && (
+                  <button
+                    disabled={own}
+                    onClick={() => void act('publish', 'Вопрос опубликован.')}
+                    className="px-4 py-1.5 text-xs font-semibold text-white bg-[#FF5A36] hover:bg-[#E84D2B] rounded-md cursor-pointer disabled:opacity-40"
+                  >
+                    Опубликовать
+                  </button>
+                )}
               </div>
             </div>
           ) : (
             <div className="bg-white rounded-xl border border-[#E2DED5] p-12 text-center text-xs text-[#78716C]">
-              Выберите вопрос из левой колонки для проведения экспертизы.
+              Выберите вопрос в очереди.
             </div>
           )}
         </div>

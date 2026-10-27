@@ -1,8 +1,3 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './admin/components/layout/AdminLayout';
 import { OverviewPage } from './admin/pages/OverviewPage';
@@ -29,15 +24,42 @@ import { RolesPage } from './admin/pages/RolesPage';
 import { SettingsPage } from './admin/pages/SettingsPage';
 import { QuestionEditor } from './admin/components/editors/QuestionEditor';
 import { ImportWizard } from './admin/components/editors/ImportWizard';
-import { adminService } from './admin/services/adminService';
+import { StaffAuthProvider, useStaff } from './admin/auth/StaffAuth';
+import { AcceptInviteScreen, LoadingScreen, MfaScreen, SignInScreen } from './admin/auth/AuthScreens';
+import { AttentionProvider } from './admin/api/AttentionProvider';
+import { ForbiddenBlock, SectionNotConnected } from './admin/components/ui/PageState';
 
-export default function App() {
+/** Sections whose server side does not exist yet. They are labelled; nothing on them is loaded or saved. */
+const NOT_CONNECTED: Array<{ prefix: string; what: string }> = [
+  { prefix: '/admin/schools', what: 'на сервере ещё нет школ и заявок школ' },
+  { prefix: '/admin/teachers', what: 'на сервере ещё нет учителей и классов' },
+  { prefix: '/admin/exams', what: 'конструктор пробных экзаменов появится вместе с банком опубликованных вопросов' },
+  { prefix: '/admin/assignments', what: 'школьные задания появятся вместе со школами' },
+  { prefix: '/admin/activity', what: 'журнал действий учеников ещё не ведётся; действия сотрудников — в «Истории действий»' },
+  { prefix: '/admin/finance', what: 'лицензии и платежи не подключены, ценовая модель не утверждена' },
+  { prefix: '/admin/support', what: 'обращения пользователей ещё не принимаются' },
+  { prefix: '/admin/reports', what: 'жалобы учеников на задания ещё не принимаются' },
+  { prefix: '/admin/settings', what: 'параметры платформы задаются в конфигурации сервера' },
+];
+
+/** Permission each section needs. Hiding is convenience: the server refuses the request anyway. */
+const SECTION_PERMISSION: Array<{ prefix: string; permission: string }> = [
+  { prefix: '/admin/users', permission: 'users.read' },
+  { prefix: '/admin/content/review', permission: 'content.review' },
+  { prefix: '/admin/content/questions/new', permission: 'content.create' },
+  { prefix: '/admin/content/questions/import', permission: 'content.create' },
+  { prefix: '/admin/audit', permission: 'audit.read' },
+  { prefix: '/admin/monitoring', permission: 'monitoring.read' },
+  { prefix: '/admin/roles', permission: 'staff.manage' },
+];
+
+function AdminApp() {
+  const { status, can, refresh } = useStaff();
   const [currentPath, setCurrentPath] = useState<string>(() => {
     const p = window.location.pathname;
-    return p.startsWith('/admin') ? p : '/admin';
+    return p.startsWith('/admin') || p.startsWith('/accept-invite') ? p : '/admin';
   });
 
-  // Sync with browser history
   useEffect(() => {
     const handlePopState = () => {
       const p = window.location.pathname;
@@ -48,59 +70,50 @@ export default function App() {
   }, []);
 
   const navigateTo = (path: string) => {
-    setCurrentPath(path);
+    setCurrentPath(path.split('?')[0]);
     window.history.pushState(null, '', path);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Admin Route Resolver
+  if (currentPath.startsWith('/accept-invite')) {
+    const token = new URLSearchParams(window.location.search).get('token') ?? '';
+    return (
+      <AcceptInviteScreen
+        token={token}
+        onDone={() => {
+          navigateTo('/admin');
+          void refresh();
+        }}
+      />
+    );
+  }
+  if (status === 'loading') return <LoadingScreen />;
+  if (status === 'signed_out') return <SignInScreen />;
+  if (status === 'mfa_setup') return <MfaScreen enrol />;
+  if (status === 'mfa_verify') return <MfaScreen enrol={false} />;
+
   const renderAdminContent = () => {
-    // Question new / edit route
+    const guard = SECTION_PERMISSION.find((s) => currentPath.startsWith(s.prefix));
+    if (guard && !can(guard.permission)) return <ForbiddenBlock />;
+
     if (currentPath === '/admin/content/questions/new') {
-      return (
-        <QuestionEditor
-          onSave={() => navigateTo('/admin/content/questions')}
-          onCancel={() => navigateTo('/admin/content/questions')}
-        />
-      );
+      return <QuestionEditor onClose={() => navigateTo('/admin/content/questions')} />;
     }
-
-    if (currentPath.startsWith('/admin/content/questions/') && currentPath !== '/admin/content/questions/import') {
-      const qId = currentPath.replace('/admin/content/questions/', '');
-      const question = adminService.getQuestionById(qId);
-      return (
-        <QuestionEditor
-          initialQuestion={question}
-          onSave={() => navigateTo('/admin/content/questions')}
-          onCancel={() => navigateTo('/admin/content/questions')}
-        />
-      );
-    }
-
     if (currentPath === '/admin/content/questions/import') {
-      return (
-        <ImportWizard
-          onDone={() => navigateTo('/admin/content/questions')}
-          onCancel={() => navigateTo('/admin/content/questions')}
-        />
-      );
+      return <ImportWizard onDone={() => navigateTo('/admin/content/questions')} onCancel={() => navigateTo('/admin/content/questions')} />;
     }
-
-    // User details route
+    if (currentPath.startsWith('/admin/content/questions/')) {
+      const id = currentPath.replace('/admin/content/questions/', '');
+      return <QuestionEditor key={id} questionId={id} onClose={() => navigateTo('/admin/content/questions')} />;
+    }
     if (currentPath.startsWith('/admin/users/')) {
-      const uId = currentPath.replace('/admin/users/', '');
-      return <UserDetailPage userId={uId} onNavigate={navigateTo} />;
+      return <UserDetailPage userId={currentPath.replace('/admin/users/', '')} onNavigate={navigateTo} />;
     }
-
-    // School details route
     if (currentPath.startsWith('/admin/schools/')) {
-      const sId = currentPath.replace('/admin/schools/', '');
-      return <SchoolDetailPage schoolId={sId} onNavigate={navigateTo} />;
+      return <SchoolDetailPage schoolId={currentPath.replace('/admin/schools/', '')} onNavigate={navigateTo} />;
     }
 
     switch (currentPath) {
-      case '/admin':
-        return <OverviewPage onNavigate={navigateTo} />;
       case '/admin/users':
         return <UsersPage onNavigate={navigateTo} />;
       case '/admin/schools':
@@ -144,9 +157,22 @@ export default function App() {
     }
   };
 
+  const notConnected = NOT_CONNECTED.find((s) => currentPath.startsWith(s.prefix));
+
   return (
-    <AdminLayout currentPath={currentPath} onNavigate={navigateTo}>
-      {renderAdminContent()}
-    </AdminLayout>
+    <AttentionProvider>
+      <AdminLayout currentPath={currentPath} onNavigate={navigateTo}>
+        {notConnected && <SectionNotConnected what={notConnected.what} />}
+        {renderAdminContent()}
+      </AdminLayout>
+    </AttentionProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <StaffAuthProvider>
+      <AdminApp />
+    </StaffAuthProvider>
   );
 }

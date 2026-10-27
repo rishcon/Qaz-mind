@@ -1,125 +1,73 @@
-import React, { useState } from 'react';
-import { Users, GraduationCap, Sparkles, Building2, CreditCard } from 'lucide-react';
+import React from 'react';
+import { adminApi } from '../api/client';
+import { useAdminData } from '../api/useAdminData';
 import { MetricCard } from '../components/ui/MetricCard';
-import { ADMIN_API_CONNECTED } from '../services/adminService';
+import { ErrorBlock, LoadingBlock, fmtDate } from '../components/ui/PageState';
 
-/**
- * Platform analytics. Every figure is calculated on the server from real data (ТЗ, п. 9.3: numerator and
- * denominator are shown separately, no forecasts). Until the analytics endpoint exists, figures are not loaded.
- */
+const share = (part: number, whole: number) => (whole > 0 ? `${part} из ${whole} (${Math.round((part / whole) * 100)}%)` : `${part} из ${whole}`);
 
-type TabId = 'audience' | 'learning' | 'quality' | 'schools' | 'licences';
-
-const TABS: Array<{ id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-  { id: 'audience', label: 'Аудитория', icon: Users },
-  { id: 'learning', label: 'Учебный прогресс', icon: GraduationCap },
-  { id: 'quality', label: 'Качество контента', icon: Sparkles },
-  { id: 'schools', label: 'Школы', icon: Building2 },
-  { id: 'licences', label: 'Лицензии и места', icon: CreditCard },
-];
-
-interface Indicator {
-  title: string;
-  hint: string;
-}
-
-const INDICATORS: Record<TabId, Indicator[]> = {
-  audience: [
-    { title: 'Зарегистрированные пользователи', hint: 'Всего и за выбранный период' },
-    { title: 'Подтверждённые адреса', hint: 'Из всех регистраций: числитель и знаменатель' },
-    { title: 'Активные за день', hint: 'Пользователи с входом или действием в сутки' },
-    { title: 'Завершившие онбординг', hint: 'Из всех зарегистрированных' },
-  ],
-  learning: [
-    { title: 'Начатые уроки', hint: 'Уроки с сохранённым прогрессом' },
-    { title: 'Завершённые уроки', hint: 'Из начатых' },
-    { title: 'Пробные экзамены', hint: 'Сдачи: доступны после подключения пробников' },
-    { title: 'Ошибки по темам', hint: 'Распределение по темам программы' },
-  ],
-  quality: [
-    { title: 'Вопросы в банке', hint: 'По статусам: черновик, на проверке, опубликован' },
-    { title: 'Ожидают рецензии', hint: 'Вопросы в статусе «на проверке»' },
-    { title: 'Жалобы учащихся', hint: 'Открытые и закрытые' },
-    { title: 'Вопросы без перевода KZ', hint: 'Требуется перевод до публикации' },
-  ],
-  schools: [
-    { title: 'Подключённые школы', hint: 'Одобренные заявки' },
-    { title: 'Классы', hint: 'Всего по всем школам' },
-    { title: 'Учащиеся в классах', hint: 'Из лицензионного пула' },
-    { title: 'Выполнение заданий школ', hint: 'Выполнено к сроку: числитель и знаменатель' },
-  ],
-  licences: [
-    { title: 'Лицензии с местами', hint: 'Куплено и занято мест' },
-    { title: 'Истекающие лицензии', hint: 'Срок действия в ближайшие 30 дней' },
-    { title: 'Свободные места', hint: 'Куплено минус занято' },
-  ],
-};
-
+/** Every figure is counted on the server from the database. Numerator and denominator are shown together. */
 export const AnalyticsPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<TabId>('audience');
-  const [period, setPeriod] = useState<'30days' | '90days' | 'year'>('30days');
+  const { data, error, loading, reload } = useAdminData(() => adminApi.overview(), [], 60000);
+  if (!data) return loading ? <LoadingBlock /> : <ErrorBlock text={error ?? ''} onRetry={reload} />;
+
+  const funnel = [
+    { label: 'Зарегистрировались', value: data.users_total },
+    { label: 'Подтвердили email', value: data.users_verified },
+    { label: 'Прошли онбординг', value: data.onboarding_completed },
+    { label: 'Активны за 24 часа', value: data.active_24h },
+  ];
+  const q = data.questions;
+  const maxDay = Math.max(1, ...data.registrations_by_day.map((d) => d.count));
 
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-[#E2DED5]">
-        <div>
-          <h1 className="text-xl font-bold text-[#171717]">Платформенная аналитика</h1>
-          <p className="text-xs text-[#78716C] mt-0.5">
-            Показатели считаются на сервере по реальным данным. Здесь не показываются прогнозы и оценки.
-          </p>
-        </div>
-
-        {/* Period Selector */}
-        <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-[#E2DED5] text-xs">
-          {[
-            { id: '30days', label: '30 дней' },
-            { id: '90days', label: 'Квартал' },
-            { id: 'year', label: 'Учебный год' },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setPeriod(tab.id as typeof period)}
-              className={`px-3 py-1 rounded-md font-medium cursor-pointer transition-colors ${
-                period === tab.id ? 'bg-[#FF5A36] text-white shadow-xs' : 'text-[#78716C] hover:text-[#171717]'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+      <div className="pb-2 border-b border-[#E2DED5]">
+        <h1 className="text-xl font-bold text-[#171717]">Аналитика</h1>
+        <p className="text-xs text-[#78716C] mt-0.5">Посчитано по базе на {fmtDate(data.generated_at, true)}. Прогнозов и оценок здесь нет.</p>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1 bg-[#FAF9F6] p-1 rounded-xl border border-[#E2DED5] text-xs overflow-x-auto">
-        {TABS.map((tab) => {
-          const Icon = tab.icon;
-          const isCurrent = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                isCurrent ? 'bg-white text-[#171717] shadow-xs border border-[#E2DED5]' : 'text-[#78716C] hover:text-[#171717]'
-              }`}
-            >
-              <Icon className={`w-3.5 h-3.5 ${isCurrent ? 'text-[#FF5A36]' : 'text-[#78716C]'}`} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {INDICATORS[activeTab].map((indicator) => (
-          <MetricCard key={indicator.title} title={indicator.title} value="—" subtitle={indicator.hint} />
+      <div className="bg-white rounded-xl border border-[#E2DED5] p-5 space-y-3">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-[#171717]">Воронка учеников</h2>
+        {funnel.map((step) => (
+          <div key={step.label} className="space-y-1">
+            <div className="flex justify-between text-xs">
+              <span className="text-[#5C574F]">{step.label}</span>
+              <span className="font-mono text-[#171717]">{share(step.value, data.users_total)}</span>
+            </div>
+            <div className="h-2 rounded bg-[#F0EEE8] overflow-hidden">
+              <div className="h-full bg-[#FF5A36]" style={{ width: `${data.users_total ? (step.value / data.users_total) * 100 : 0}%` }} />
+            </div>
+          </div>
         ))}
       </div>
 
-      <p className="text-xs text-[#78716C]">
-        {ADMIN_API_CONNECTED
-          ? 'Значения загружаются за выбранный период.'
-          : 'Значения не загружены: сервер аналитики ещё не подключён. Прочерк означает «нет данных», а не ноль.'}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <MetricCard title="Новые за 7 дней" value={data.new_7d} />
+        <MetricCard title="Опубликовано уроков" value={data.lessons_published} subtitle={`${data.lessons_in_review} версий на рецензии`} />
+        <MetricCard title="Завершений уроков" value={data.lessons_completed} />
+        <MetricCard title="Вопросов опубликовано" value={q.published} subtitle={`${q.draft + q.in_review + q.approved} в работе · ${q.archived} в архиве`} />
+      </div>
+
+      <div className="bg-white rounded-xl border border-[#E2DED5] p-5">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-[#171717] mb-3">Регистрации по дням (14 дней)</h2>
+        <table className="w-full text-xs">
+          <tbody className="divide-y divide-[#E2DED5]">
+            {data.registrations_by_day.map((d) => (
+              <tr key={d.date}>
+                <td className="py-1.5 font-mono text-[#78716C] w-28">{d.date}</td>
+                <td className="py-1.5">
+                  <div className="h-2 rounded bg-[#FF5A36]/80" style={{ width: `${(d.count / maxDay) * 100}%`, minWidth: d.count ? 4 : 0 }} />
+                </td>
+                <td className="py-1.5 text-right font-mono w-12">{d.count}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="text-[11px] text-[#78716C]">
+        Пробные экзамены, школы и лицензии появятся в аналитике вместе с их серверной частью.
       </p>
     </div>
   );

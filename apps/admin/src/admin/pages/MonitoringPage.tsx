@@ -1,91 +1,55 @@
 import React from 'react';
-import { Cpu, Database, Server, RefreshCw, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
-import { adminService, ADMIN_API_CONNECTED } from '../services/adminService';
+import { Cpu, RefreshCw } from 'lucide-react';
+import { adminApi } from '../api/client';
+import { useAdminData } from '../api/useAdminData';
+import { MetricCard } from '../components/ui/MetricCard';
 import { StatusBadge } from '../components/ui/StatusBadge';
+import { ErrorBlock, LoadingBlock, fmtDate } from '../components/ui/PageState';
 
-const NOT_LOADED = 'Данные не загружены: сервер администрирования не подключён.';
-
+/** Live checks made by the server on each request: database round trip, SMTP connection, session counts. */
 export const MonitoringPage: React.FC = () => {
-  const services = adminService.getSystemServices();
-  const backgroundJobs = adminService.getBackgroundJobs();
+  const { data, error, loading, reload } = useAdminData(() => adminApi.monitoring(), [], 10000);
+
+  if (!data) return loading ? <LoadingBlock /> : <ErrorBlock text={error ?? ''} onRetry={reload} />;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
-      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-[#E2DED5]">
         <div>
-          <h1 className="text-xl font-bold text-[#171717]">Системный мониторинг и службы</h1>
+          <h1 className="text-xl font-bold text-[#171717]">Мониторинг</h1>
           <p className="text-xs text-[#78716C] mt-0.5">
-            Техническое состояние инфраструктуры, фоновые воркеры и статус соединений базы данных.
+            Проверено сервером {fmtDate(data.checked_at, true)}. Обновляется каждые 10 секунд.
           </p>
         </div>
+        <button onClick={reload} className="px-3 py-1.5 text-xs font-medium bg-white border border-[#E2DED5] rounded-md hover:bg-[#F5F3EE] flex items-center gap-1.5 cursor-pointer">
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Проверить сейчас
+        </button>
+      </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-[#78716C] flex items-center gap-1.5 font-medium">
-            <span className="w-2 h-2 rounded-full bg-[#A8A29E]" />
-            {ADMIN_API_CONNECTED ? 'Состояние загружено' : 'Состояние неизвестно'}
-          </span>
+      {error && <ErrorBlock text={error} onRetry={reload} />}
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+        <MetricCard title="Сессии учеников" value={data.student_sessions_active} subtitle="действующие" />
+        <MetricCard title="Сессии сотрудников" value={data.staff_sessions_active} subtitle="с подтверждённым кодом" />
+        <MetricCard title="Активные сотрудники" value={data.staff_active} />
+        <MetricCard title="Отказы за 24 часа" value={data.admin_failures_24h} subtitle="неудачные входы и коды" />
+      </div>
+
+      <div className="bg-white rounded-xl border border-[#E2DED5] p-5">
+        <div className="flex items-center gap-2 pb-3 border-b border-[#E2DED5]">
+          <Cpu className="w-4 h-4 text-[#FF5A36]" />
+          <h2 className="text-xs font-bold uppercase tracking-wider text-[#171717]">Службы</h2>
         </div>
-      </div>
-
-      <div className="p-3.5 bg-[#FEF7EA] border border-[#D89B35]/30 rounded-xl text-xs text-[#9A6715] flex items-center gap-2">
-        <AlertTriangle className="w-4 h-4 shrink-0" />
-        <span>Телеметрия серверов и очередей не подключена. Здесь отображаются только реально полученные данные.</span>
-      </div>
-
-      {/* Services Health Cards */}
-      <div className="bg-white rounded-xl border border-[#E2DED5] p-5 shadow-xs space-y-4">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-[#171717]">
-          Инфраструктурные сервисы платформы
-        </h2>
-
-        {services.length === 0 && <p className="text-xs text-[#78716C]">{NOT_LOADED}</p>}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-          {services.map((srv) => (
-            <div
-              key={srv.id}
-              className="p-4 rounded-lg border border-[#E2DED5] bg-[#FAF9F6] space-y-2.5"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#171717]">{srv.name}</span>
-                <StatusBadge status={srv.status} size="sm" />
-              </div>
-              <div className="flex items-center justify-between text-xs text-[#78716C]">
-                <span>Задержка (Latency):</span>
-                <span className="font-mono font-bold text-[#171717]">{srv.latencyMs} ms</span>
-              </div>
-              <div className="flex items-center justify-between text-xs text-[#78716C]">
-                <span>Доступность (Uptime):</span>
-                <span className="font-mono font-bold text-[#258568]">{srv.uptimePercent}%</span>
-              </div>
-              {srv.notes && (
-                <p className="text-[10px] text-[#A8A29E] pt-1 border-t border-[#E2DED5] italic">
-                  {srv.notes}
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Background Jobs Table */}
-      <div className="bg-white rounded-xl border border-[#E2DED5] p-5 shadow-xs space-y-4">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-[#171717]">
-          Фоновые задачи и регулярные воркеры
-        </h2>
-
-        {backgroundJobs.length === 0 && <p className="text-xs text-[#78716C]">{NOT_LOADED}</p>}
-        <div className="divide-y divide-[#E2DED5] text-xs">
-          {backgroundJobs.map((job) => (
-            <div key={job.id} className="py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="divide-y divide-[#E2DED5]">
+          {data.services.map((s) => (
+            <div key={s.id} className="py-3 flex flex-wrap items-center justify-between gap-3 text-xs">
               <div>
-                <div className="font-semibold text-[#171717]">{job.name}</div>
-                <div className="text-[11px] text-[#78716C]">Тип: {job.type} • Попыток: {job.attempts}</div>
+                <div className="font-semibold text-[#171717]">{s.name}</div>
+                <div className="text-[11px] text-[#78716C]">{s.details}</div>
               </div>
-
               <div className="flex items-center gap-4">
-                <span className="font-mono text-[#78716C]">{job.durationMs} ms</span>
-                <StatusBadge status={job.status} />
+                <span className="font-mono text-[11px] text-[#78716C]">{s.latency_ms !== null ? `${s.latency_ms} мс` : '—'}</span>
+                <StatusBadge status={s.status} />
               </div>
             </div>
           ))}
