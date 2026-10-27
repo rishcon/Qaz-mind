@@ -1,0 +1,111 @@
+# Example reverse proxy for production. Not deployed yet: there is no host, certificate or server yet
+# (see docs/INTEGRATION.md). Replace example.* paths and certificate files before use.
+#
+# Layout:
+#   qazmind.asia        static QazMind Web build, /api proxied to the backend (same origin, host-only cookies)
+#   admin.qazmind.asia  static QazMind Admin build, /api proxied to the same backend, not indexed
+#   api.qazmind.asia    backend for direct API clients; browsers reach it through the frontends above
+#
+# CORS: the backend allows only the origins listed in API_CORS_ORIGINS. Never use a wildcard with credentials.
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+upstream qazmind_api {
+    server 127.0.0.1:8000;
+    keepalive 16;
+}
+
+server {
+    listen 80;
+    server_name qazmind.asia admin.qazmind.asia api.qazmind.asia;
+    return 301 https://$host$request_uri;
+}
+
+# QazMind Web
+server {
+    listen 443 ssl http2;
+    server_name qazmind.asia;
+
+    ssl_certificate     /etc/letsencrypt/live/qazmind.asia/fullchain.pem;   # example path
+    ssl_certificate_key /etc/letsencrypt/live/qazmind.asia/privkey.pem;     # example path
+
+    root /var/www/qazmind/web;             # output of `npm run build:web`
+    index index.html;
+    client_max_body_size 2m;
+
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header X-Frame-Options DENY always;
+
+    location /api/ {
+        proxy_pass http://qazmind_api;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_set_header Connection $connection_upgrade;
+    }
+
+    # Single-page app: unknown paths return index.html so direct URLs and refresh work.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+
+# QazMind Admin
+server {
+    listen 443 ssl http2;
+    server_name admin.qazmind.asia;
+
+    ssl_certificate     /etc/letsencrypt/live/admin.qazmind.asia/fullchain.pem;  # example path
+    ssl_certificate_key /etc/letsencrypt/live/admin.qazmind.asia/privkey.pem;    # example path
+
+    root /var/www/qazmind/admin;           # output of `npm run build:admin` without VITE_ADMIN_DEMO_MODE
+    index index.html;
+    client_max_body_size 2m;
+
+    # The admin panel must not be found by search engines, and must not be framed.
+    add_header X-Robots-Tag "noindex, nofollow" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+
+    location /api/ {
+        proxy_pass http://qazmind_api;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_set_header Connection $connection_upgrade;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+
+# Backend for direct API clients
+server {
+    listen 443 ssl http2;
+    server_name api.qazmind.asia;
+
+    ssl_certificate     /etc/letsencrypt/live/api.qazmind.asia/fullchain.pem;    # example path
+    ssl_certificate_key /etc/letsencrypt/live/api.qazmind.asia/privkey.pem;      # example path
+
+    client_max_body_size 1m;
+
+    location / {
+        proxy_pass http://qazmind_api;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_set_header Connection $connection_upgrade;
+    }
+}

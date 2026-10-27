@@ -1,127 +1,123 @@
 # QazMind
 
-Платформа подготовки к ЕНТ / ҰБТ. Фронтенд на React 19 + Vite, API на FastAPI + PostgreSQL.
+Платформа подготовки к ЕНТ / ҰБТ. Состоит из трёх частей, которые работают вместе:
 
-Статус: **этапы 0–4 выполнены** (аудит, backend, аккаунты и сессии, онбординг и профиль, учебный контент и прогресс уроков). Практика, школы и пробники ещё не подключены к серверу. Опубликованного контента пока нет: ожидается проверка методистом. Подробнее — `docs/TECHNICAL_CHECKLIST.md`.
+| Часть | Папка | Адрес в разработке |
+|---|---|---|
+| QazMind Web — ученики, школы, лендинг | `apps/web` | http://localhost:5173 |
+| QazMind Admin — панель платформы | `apps/admin` | http://localhost:5174 |
+| API (FastAPI, PostgreSQL) | `apps/api` | http://localhost:8000/api/v1 |
 
-## Структура
-
-```
-src/                 React-фронтенд (визуальный стиль сохранён)
-  api/               клиент API, эндпоинты, маппинг в UI-типы
-  auth/              AuthProvider: сессия из /auth/me
-  components/        экраны (лендинг, auth, онбординг, кабинет, Focus, школы — демо)
-  content/           учебный контент-прототип (мигрирует на сервер в этапе 4)
-backend/             FastAPI-приложение
-  app/api/v1/        маршруты /api/v1
-  app/services/      бизнес-логика (аутентификация, профиль, почта)
-  app/models/        SQLAlchemy-модели
-  app/tests/         pytest
-  alembic/           миграции
-docs/                техническое задание, аудит этапа 0, чеклист, архив промптов
-```
+Общий HTTP-клиент и типы: `packages/contracts`. Архитектура: `docs/ARCHITECTURE.md`. Что перенесено и что проверено: `docs/INTEGRATION.md`. Контракты API: `docs/API_CONTRACTS.md`. Чеклист этапов: `docs/TECHNICAL_CHECKLIST.md`.
 
 ## Требования
 
-- Node.js 22+ и npm
-- Python 3.12+
-- PostgreSQL 16+ (или `docker compose up -d db`)
+- Node.js 22 и npm
+- Python 3.12 (для API)
+- Docker Desktop (PostgreSQL, API и Mailpit в контейнерах)
 
-## Запуск локально
+## Первый запуск
 
-1. Фронтенд:
-   ```bash
-   npm ci
-   npm run dev          # http://localhost:3000, /api проксируется на localhost:8000
-   ```
-2. Бэкенд:
-   ```bash
-   cd backend
-   python -m venv .venv && .venv/Scripts/activate      # Windows; на Linux/macOS: source .venv/bin/activate
-   pip install -e ".[dev]"
-   cp .env.example .env                                  # при необходимости поправить DATABASE_URL
-   alembic upgrade head
-   uvicorn app.main:app --reload --port 8000
-   ```
-3. Письма уходят в **Mailpit** (см. раздел «Почта в разработке» ниже).
-
-Вариант через Docker (проверено):
 ```bash
-docker compose up -d --build                       # PostgreSQL 16 на localhost:55432, API на localhost:8000
-docker compose exec api alembic upgrade head       # миграции
-docker compose exec -T db psql -U qazmind -d qazmind -c "CREATE DATABASE qazmind_test;"
-docker compose exec -T -e TEST_DATABASE_URL=postgresql+asyncpg://qazmind:qazmind@db:5432/qazmind_test api pytest -q
+npm install                       # все фронтенды и общий пакет, один раз из корня
+
+docker compose up -d --build      # PostgreSQL :55432, API :8000, Mailpit :8025
+docker compose exec api alembic upgrade head
+
+npm run dev                       # оба фронтенда: web :5173 и admin :5174
 ```
-Порт 55432 выбран специально: 5432 часто занят локальным PostgreSQL на машине разработчика.
 
-## Почта в разработке (Mailpit)
+Переменные окружения необязательны для локального запуска: значения по умолчанию совпадают с Docker-стеком. Если нужно что-то изменить, см. раздел «Переменные окружения».
 
-Все письма приложения (подтверждение email, восстановление пароля) уходят в Mailpit и не покидают вашу машину.
+Оба фронтенда слушают `127.0.0.1` и не переходят на другой порт, если свой занят: в этом случае команда завершается с ошибкой.
 
-1. Запустите стек: `docker compose up -d`.
-2. Откройте **http://localhost:8025**. Здесь видны все письма, их можно открыть, искать и удалить.
-3. Зарегистрируйтесь на сайте, письмо появится в Mailpit: откройте его и нажмите ссылку «открыть ссылку» (или скопируйте адрес `http://localhost:3000/verify-email?token=...`). Ссылка действует 24 часа.
-4. Если письма не видно, проверьте, что Mailpit запущен: `docker compose ps`.
+## Команды
 
-Ссылки ведут на `localhost`, поэтому открывать их нужно на этом же компьютере.
+| Команда | Что делает |
+|---|---|
+| `npm run dev` | запускает QazMind Web и QazMind Admin одновременно |
+| `npm run dev:web` / `npm run dev:admin` | один фронтенд |
+| `npm run build` | сборка обоих фронтендов |
+| `npm run build:web` / `npm run build:admin` | сборка одного приложения |
+| `npm run typecheck` | проверка типов во всех пакетах |
+| `npm test` | unit-тесты фронтендов и общего пакета |
+| `npm run export:prototype` | экспорт прототипных уроков в черновики для API |
 
-Для настоящей почты (Gmail, Resend и т. д.) задайте `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_STARTTLS=true` в `backend/.env`. Пароли не коммитьте.
+Бэкенд:
+
+```bash
+cd apps/api
+python -m venv .venv && .venv/Scripts/activate      # Windows; Linux/macOS: source .venv/bin/activate
+pip install -e ".[dev]"
+TEST_DATABASE_URL=postgresql+asyncpg://qazmind:qazmind@localhost:55432/qazmind_test pytest -q
+```
+
+Тесты API используют отдельную базу `qazmind_test`: схема пересоздаётся миграциями. Не указывайте рабочую базу.
+
+## Почта в разработке
+
+Все письма приложения (подтверждение, восстановление пароля) уходят в Mailpit и никуда не отправляются. Откройте http://localhost:8025, чтобы увидеть письма и нажать ссылку подтверждения. Ссылки ведут на `localhost:5173`, поэтому открывать их нужно на этом же компьютере.
 
 ## Учебный контент
 
 Уроки загружаются файлом и публикуются только после проверки другим человеком:
 
 ```bash
-cd backend
-python -m app.content.cli import content/drafts/history_kz.json     # статус draft, ученики не видят
+cd apps/api
+python -m app.content.cli import content/drafts/history_kz.json   # статус draft, ученики не видят
 python -m app.content.cli status
 python -m app.content.cli transition khanate-foundation 1 submit  --by "Автор"
 python -m app.content.cli transition khanate-foundation 1 approve --by "Ревьюер"   # не автор
 python -m app.content.cli transition khanate-foundation 1 publish --by "Ревьюер"
 ```
 
-Файлы в `backend/content/drafts/` — непроверенные ИИ-черновики из прототипа. Их нельзя публиковать без сверки с учебником.
-
-## Тесты
-
-```bash
-npm run lint        # TypeScript
-npm test            # unit-тесты фронтенда
-npm run build       # production-сборка
-
-cd backend
-TEST_DATABASE_URL=postgresql+asyncpg://qazmind:qazmind@localhost:5432/qazmind_test pytest -q
-```
-
-Тесты backend используют отдельную одноразовую БД (`TEST_DATABASE_URL`): схема пересоздаётся миграциями перед каждым запуском. Не указывайте рабочую базу.
+Файлы в `apps/api/content/drafts/` — непроверенные ИИ-черновики из прототипа. Их нельзя публиковать без сверки с учебником.
 
 ## Переменные окружения
 
-| Где | Переменная | Назначение |
-|---|---|---|
-| фронтенд | `VITE_API_BASE_URL` | адрес API; пусто — прокси Vite на `/api` |
-| фронтенд | `VITE_DEMO_MODE` | `true` только для показа прототипа школ/учителей/админа |
-| backend | `DATABASE_URL` | подключение к PostgreSQL |
-| backend | `PUBLIC_APP_URL` | адрес фронтенда для ссылок в письмах |
-| backend | `API_CORS_ORIGINS` | разрешённые origin (JSON-список) |
-| backend | `COOKIE_SECURE` | `true` за HTTPS (обязательно в staging/production) |
-| backend | `MAIL_MODE` | `smtp` (по умолчанию в compose, Mailpit) или `dev_log` (только для тестов) |
-| backend | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_STARTTLS`, `MAIL_FROM` | настройки SMTP-сервера |
+Полный справочник: `.env.example`. Каждое приложение читает свой файл, копируется из соответствующего `.example`:
 
-Секреты не коммитятся: `.env*` игнорируется, в репозитории только `.env.example`.
+| Файл | Кому нужен |
+|---|---|
+| `apps/web/.env.local` | QazMind Web (Vite): `VITE_API_BASE_URL`, `VITE_DEMO_MODE` |
+| `apps/admin/.env.local` | QazMind Admin (Vite): `VITE_ADMIN_DEMO_MODE` |
+| `apps/api/.env` | API: `DATABASE_URL`, `PUBLIC_APP_URL`, `API_CORS_ORIGINS`, `MAIL_MODE`, `SMTP_*` |
 
-## Что ещё не готово
+Секреты не коммитятся: `.env*` игнорируется git, в репозитории только примеры.
 
-- Почтовый провайдер для настоящей рассылки не подключён (открытое решение ТЗ п. 22.2). Локально письма идут в Mailpit.
-- Учебный контент, прогресс уроков и практика пока в браузере; ключи ответов лежат в клиентском коде (этапы 4–5).
-- Школы, приглашения, задания и пробники — только прототип в `DEMO_MODE` (этапы 6–9).
-- Визуальные скриншоты для регрессии и E2E в браузере не сняты.
+## Демо-режимы
 
-Не запускайте `DEMO_MODE` и не публикуйте прототип школ как рабочий сервис: его данные выдуманы.
+- **Web, `VITE_DEMO_MODE=true`** — показывает прототип школ, учителей и ссылку на админку. Данные вымышленные.
+- **Admin** — в разработке включён по умолчанию, с плашкой «ДЕМО-РЕЖИМ». В production-сборке выключен: без `VITE_ADMIN_DEMO_MODE=true` панель закрыта экраном доступа.
 
-## Документы
+Демо-режим не проверяет права. Реальный вход администраторов и проверка ролей ещё не реализованы.
 
-- `docs/QAZMIND_TECHNICAL_SPEC.md` — техническое задание (источник требований)
-- `docs/audit/stage-0.md` — аудит и реестр демо-логики
-- `docs/TECHNICAL_CHECKLIST.md` — что сделано и что открыто
-- `CLAUDE.md` — правила работы над проектом
+## Что работает
+
+Проверено на запущенном стеке:
+- регистрация, письмо в Mailpit, подтверждение, вход и выход;
+- онбординг и профиль на сервере;
+- учебный контент: опубликованный урок виден ученику, прогресс сохраняется;
+- оба фронтенда запускаются одной командой, прокси `/api` работает из обоих.
+
+## Что не готово
+
+- Почтовый провайдер для настоящей рассылки не подключён (решение ТЗ п. 22.2).
+- Вход администраторов и роли на сервере — нет. Админка на моках.
+- Практика, пробники и школы работают на локальных данных браузера или на демо. Этапы 5–9.
+- Визуальный вид обоих приложений не сверён в браузере с эталонными скриншотами.
+
+Полный список долга: `docs/INTEGRATION.md`, раздел 4.
+
+## Структура
+
+```
+apps/
+  web/        QazMind Web (React 19, Vite 8, Tailwind 4)
+  admin/      QazMind Admin (React 19, Vite 8, Tailwind 4)
+  api/        FastAPI, SQLAlchemy 2 async, Alembic, pytest
+packages/
+  contracts/  общий HTTP-клиент, типы, пути админского API
+docs/         архитектура, интеграция, контракты, промпты, аудит
+scripts/      одноразовые утилиты
+```
