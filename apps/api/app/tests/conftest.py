@@ -22,7 +22,8 @@ TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "")
 TOKEN_PATTERN = re.compile(r"token=([A-Za-z0-9_\-]+)")
 # Subjects and profile pairs are reference data and are kept; everything the tests create is cleared.
 TABLES_TO_CLEAN = (
-    "users, sessions, auth_tokens, student_profiles, lesson_progress, lesson_versions, lessons, curriculum_topics"
+    "users, sessions, auth_tokens, student_profiles, lesson_progress, lesson_versions, lessons, curriculum_topics, "
+    "questions, audit_events, staff_invitations, staff_sessions, staff_roles, staff_members"
 )
 
 

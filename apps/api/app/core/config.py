@@ -32,6 +32,16 @@ class Settings(BaseSettings):
     login_max_failures: int = 5
     login_lock_minutes: int = 15
 
+    # Staff (QazMind Admin). Values follow docs/ADMIN_ACCESS.md.
+    admin_app_url: str = "http://localhost:5174"
+    staff_session_cookie_name: str = "qm_admin_session"
+    staff_session_hours: int = 8
+    staff_session_idle_minutes: int = 30
+    staff_invitation_hours: int = 72
+    staff_password_min_length: int = 12
+    # Name shown in authenticator apps next to the code.
+    totp_issuer: str = "QazMind Admin"
+
     # "dev_log" writes emails to the server log and delivers nothing. Only for tests.
     # "smtp" sends through any SMTP server: Mailpit locally (see docker-compose.yml), a provider later.
     mail_mode: Literal["dev_log", "smtp"] = "dev_log"
