@@ -1,0 +1,1 @@
+"""QazMind API package"""

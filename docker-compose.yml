@@ -1,0 +1,38 @@
+# Local development stack: PostgreSQL + API.
+# Frontend runs on the host with `npm run dev` (Vite proxies /api to localhost:8000).
+# Credentials below are for local use only and must not be reused anywhere else.
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: qazmind
+      POSTGRES_PASSWORD: qazmind
+      POSTGRES_DB: qazmind
+    ports:
+      - "5432:5432"
+    volumes:
+      - qazmind-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qazmind -d qazmind"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_ENV: local
+      DATABASE_URL: postgresql+asyncpg://qazmind:qazmind@db:5432/qazmind
+      PUBLIC_APP_URL: http://localhost:3000
+      API_CORS_ORIGINS: '["http://localhost:3000"]'
+      COOKIE_SECURE: "false"
+      MAIL_MODE: dev_log
+    ports:
+      - "8000:8000"
+
+volumes:
+  qazmind-db:
