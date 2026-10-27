@@ -1,5 +1,6 @@
-# Local development stack: PostgreSQL, API and Mailpit (local mail catcher).
-# Frontends run on the host with `npm run dev`: QazMind Web on :5173, QazMind Admin on :5174, both proxy /api to :8000.
+# Local development stack: PostgreSQL, API, Mailpit (local mail catcher), QazMind Web and QazMind Admin.
+#   docker compose up -d --build      start everything; open http://localhost:5173 and http://localhost:5174
+# Sources are bind-mounted: edits on the host reload the API and both frontends without a rebuild.
 # Credentials below are for local use only and must not be reused anywhere else.
 # Host port 55432 is used on purpose: 5432 is often taken by a PostgreSQL installed on the developer machine.
 
@@ -35,6 +36,7 @@ services:
       APP_ENV: local
       DATABASE_URL: postgresql+asyncpg://qazmind:qazmind@db:5432/qazmind
       PUBLIC_APP_URL: http://localhost:5173
+      ADMIN_APP_URL: http://localhost:5174
       API_CORS_ORIGINS: '["http://localhost:5173","http://localhost:5174"]'
       COOKIE_SECURE: "false"
       # Emails go to Mailpit (web UI: http://localhost:8025). Nothing leaves the machine.
@@ -43,6 +45,15 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
       SMTP_STARTTLS: "false"
+      # File change detection on a Windows/macOS bind mount needs polling.
+      WATCHFILES_FORCE_POLLING: "true"
+    # Local stack only: apply migrations on start, then reload on code changes.
+    # In staging/production migrations stay an explicit deployment step.
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app"
+    volumes:
+      - ./apps/api/app:/srv/backend/app
+      - ./apps/api/alembic:/srv/backend/alembic
+      - ./apps/api/content:/srv/backend/content
     ports:
       - "8000:8000"
 
@@ -52,6 +63,38 @@ services:
     ports:
       - "8025:8025"   # web UI and API
       - "1025:1025"   # SMTP (for a backend started on the host)
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    environment:
+      WORKSPACE: "@qazmind/web"
+      API_PROXY_TARGET: http://api:8000
+    depends_on:
+      - api
+    volumes:
+      - ./apps/web/src:/repo/apps/web/src
+      - ./apps/web/index.html:/repo/apps/web/index.html
+      - ./packages/contracts/src:/repo/packages/contracts/src
+    ports:
+      - "5173:5173"
+
+  admin:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    environment:
+      WORKSPACE: "@qazmind/admin"
+      API_PROXY_TARGET: http://api:8000
+    depends_on:
+      - api
+    volumes:
+      - ./apps/admin/src:/repo/apps/admin/src
+      - ./apps/admin/index.html:/repo/apps/admin/index.html
+      - ./packages/contracts/src:/repo/packages/contracts/src
+    ports:
+      - "5174:5174"
 
 volumes:
   qazmind-db:

@@ -5,13 +5,17 @@ import { defineConfig } from 'vite';
 // QazMind Web: http://127.0.0.1:5173 (also reachable as http://localhost:5173).
 // /api is forwarded to the FastAPI backend, so the browser sees one origin and session cookies work.
 const apiTarget = process.env.API_PROXY_TARGET || 'http://localhost:8000';
+// In Docker the dev server listens on all interfaces of the container and polls files on the bind mount.
+const host = process.env.DEV_HOST || '127.0.0.1';
+const usePolling = process.env.DEV_USE_POLLING === 'true';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
-    host: '127.0.0.1',
+    host,
     port: 5173,
     strictPort: true,
+    watch: usePolling ? { usePolling: true, interval: 300 } : undefined,
     proxy: { '/api': { target: apiTarget } },
   },
   preview: {

@@ -1,0 +1,11 @@
+# Build context of docker/frontend.Dockerfile is the repository root. Only sources and lockfiles are needed.
+**/node_modules
+**/dist
+.git
+.github
+apps/api
+docs
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log

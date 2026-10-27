@@ -12,6 +12,7 @@ import argparse
 import asyncio
 import sys
 
+from email_validator import EmailNotValidError, validate_email
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -39,6 +40,12 @@ async def _run(work):
 
 
 async def bootstrap_owner(email: str, name: str) -> int:
+    try:
+        email = validate_email(email, check_deliverability=False).normalized
+    except EmailNotValidError as error:
+        print(f"Неверный email: {error}", file=sys.stderr)
+        return 1
+
     async def work(db, settings):
         owners = (
             await db.execute(select(func.count()).select_from(StaffRole).where(StaffRole.role == "OWNER"))
