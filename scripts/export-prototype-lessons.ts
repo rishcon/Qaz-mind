@@ -1,18 +1,18 @@
 // One-off export: turns the prototype lesson modules into content files for the backend importer.
 // Output is DRAFT material: nothing here is verified by an expert, and the importer never publishes it.
 //
-//   npx tsx scripts/export-prototype-lessons.ts
+//   npm run export:prototype   (or: npx tsx scripts/export-prototype-lessons.ts)
 //
-// Writes backend/content/drafts/<subject>.json. Lessons without a chapter or without a parseable
+// Writes apps/api/content/drafts/<subject>.json. Lessons without a chapter or without a parseable
 // duration are skipped and reported, never guessed.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ALL_SUBJECT_CURRICULA, LESSON_MODULES } from '../src/content/curriculumData';
+import { ALL_SUBJECT_CURRICULA, LESSON_MODULES } from '../apps/web/src/content/curriculumData';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const outDir = join(here, '..', 'backend', 'content', 'drafts');
+const outDir = join(here, '..', 'apps', 'api', 'content', 'drafts');
 const AUTHOR = 'Прототип QazMind (ИИ-черновик, не проверен)';
 const SOURCE = 'Прототип QazMind: не сверено с учебником и не проверено экспертом';
 

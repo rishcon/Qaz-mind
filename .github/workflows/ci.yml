@@ -15,7 +15,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run lint
+      - run: npm run typecheck
       - run: npm test
       - run: npm run build
 
@@ -37,7 +37,7 @@ jobs:
       TEST_DATABASE_URL: postgresql+asyncpg://qazmind:qazmind@localhost:5432/qazmind_test
     defaults:
       run:
-        working-directory: backend
+        working-directory: apps/api
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

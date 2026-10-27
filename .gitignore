@@ -10,7 +10,7 @@ coverage/
 .env
 .env.*
 !.env.example
-!backend/.env.example
+!apps/api/.env.example
 
 # Python
 __pycache__/
@@ -18,8 +18,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-backend/.venv/
-backend/*.egg-info/
+.venv/
+*.egg-info/
 
 # OS and editor
 .DS_Store

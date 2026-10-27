@@ -1,32 +1,27 @@
 {
-  "name": "qazmind-frontend",
+  "name": "qazmind",
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "description": "QazMind monorepo: QazMind Web (student and school), QazMind Admin, FastAPI backend (apps/api).",
+  "workspaces": [
+    "packages/contracts",
+    "apps/web",
+    "apps/admin"
+  ],
   "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
-    "build": "vite build",
-    "preview": "vite preview",
-    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
-    "lint": "tsc --noEmit",
-    "test": "node --import tsx --test \"src/**/*.test.ts\""
-  },
-  "dependencies": {
-    "@tailwindcss/vite": "^4.3.3",
-    "@vitejs/plugin-react": "^6.1.1",
-    "lucide-react": "^0.546.0",
-    "motion": "^12.23.24",
-    "react": "^19.0.1",
-    "react-dom": "^19.0.1",
-    "vite": "^8.3.0"
+    "dev": "concurrently --names web,admin --prefix-colors blue,magenta --kill-others-on-fail \"npm run dev:web\" \"npm run dev:admin\"",
+    "dev:web": "npm run dev --workspace @qazmind/web",
+    "dev:admin": "npm run dev --workspace @qazmind/admin",
+    "build": "npm run build:web && npm run build:admin",
+    "build:web": "npm run build --workspace @qazmind/web",
+    "build:admin": "npm run build --workspace @qazmind/admin",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "export:prototype": "tsx scripts/export-prototype-lessons.ts"
   },
   "devDependencies": {
-    "@types/node": "^22.14.0",
-    "@types/react": "^19.3.0",
-    "@types/react-dom": "^19.3.0",
-    "autoprefixer": "^10.4.21",
-    "tailwindcss": "^4.3.3",
-    "tsx": "^4.21.0",
-    "typescript": "^7.0.2"
+    "concurrently": "^9.1.2",
+    "tsx": "^4.21.0"
   }
 }
