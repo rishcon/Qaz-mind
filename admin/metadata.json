@@ -1,0 +1,6 @@
+{
+  "name": "QazMind Admin — Образовательная платформа",
+  "description": "Центр управления и администрирования образовательной платформы QazMind для подготовки к ЕНТ / ҰБТ в Казахстане.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
