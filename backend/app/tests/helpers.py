@@ -22,6 +22,10 @@ async def api_patch(http: AsyncClient, path: str, json: dict) -> Response:
     return await http.patch(path, json=json, headers=await csrf_headers(http))
 
 
+async def api_put(http: AsyncClient, path: str, json: dict) -> Response:
+    return await http.put(path, json=json, headers=await csrf_headers(http))
+
+
 async def register_and_verify(harness, email: str = EMAIL, password: str = PASSWORD, name: str = NAME) -> None:
     """Register, follow the verification link from the mail; leaves the client logged in."""
     response = await api_post(harness.http, "/api/v1/auth/register", {"name": name, "email": email, "password": password})
