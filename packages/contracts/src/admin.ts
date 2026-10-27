@@ -1,8 +1,23 @@
-// Paths of the administrative API (planned, see docs/API_CONTRACTS.md). The backend does not serve them yet:
-// QazMind Admin reads its data from the local mock repository until these endpoints exist.
+// Paths of the administrative API. The backend does not serve them yet, and QazMind Admin does not call them:
+// its data layer returns no data and refuses every write until these endpoints exist (see docs/INTEGRATION.md).
+// Access model, roles and staff lifecycle: docs/ADMIN_ACCESS.md.
 
 export const ADMIN_ENDPOINTS = {
-  me: '/admin/me',
+  // Staff sign-in (separate from student sign-in, with mandatory MFA)
+  authLogin: '/admin/auth/login',
+  authMfa: '/admin/auth/mfa',
+  authLogout: '/admin/auth/logout',
+  authMe: '/admin/auth/me',
+
+  // Staff accounts and roles (owner only)
+  staff: '/admin/staff',
+  staffInvitations: '/admin/staff/invitations',
+  staffById: (id: string) => `/admin/staff/${encodeURIComponent(id)}`,
+  staffRoles: (id: string) => `/admin/staff/${encodeURIComponent(id)}/roles`,
+  staffDisable: (id: string) => `/admin/staff/${encodeURIComponent(id)}/disable`,
+  staffSessionsRevoke: (id: string) => `/admin/staff/${encodeURIComponent(id)}/sessions/revoke`,
+
+  // Platform data
   overview: '/admin/overview',
   users: '/admin/users',
   userById: (id: string) => `/admin/users/${encodeURIComponent(id)}`,

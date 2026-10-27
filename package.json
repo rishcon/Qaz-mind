@@ -17,8 +17,7 @@
     "build:web": "npm run build --workspace @qazmind/web",
     "build:admin": "npm run build --workspace @qazmind/admin",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
-    "export:prototype": "tsx scripts/export-prototype-lessons.ts"
+    "test": "npm run test --workspaces --if-present"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

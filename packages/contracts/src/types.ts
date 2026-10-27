@@ -17,7 +17,16 @@ export interface PageQuery {
 }
 
 /** Roles that exist on the server. Roles inside a school are not platform roles. */
-export const PLATFORM_ROLES = ['OWNER', 'PLATFORM_ADMIN', 'CONTENT_EDITOR', 'CONTENT_REVIEWER', 'SUPPORT'] as const;
+/** Platform staff roles. Only the platform owner grants them. Who may do what: docs/ADMIN_ACCESS.md. */
+export const PLATFORM_ROLES = [
+  'OWNER',
+  'PLATFORM_ADMIN',
+  'CONTENT_MANAGER',
+  'CONTENT_REVIEWER',
+  'SUPPORT_AGENT',
+  'FINANCE_MANAGER',
+  'ANALYST',
+] as const;
 export type PlatformRole = (typeof PLATFORM_ROLES)[number];
 
 /** Result of GET /api/v1/auth/me, as returned by the server. */
