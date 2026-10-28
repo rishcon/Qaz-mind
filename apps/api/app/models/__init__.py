@@ -7,7 +7,18 @@ from app.models.learning import LessonProgress
 from app.models.practice import PracticeAnswer, PracticeSession
 from app.models.profile import ProfilePair, StudentProfile
 from app.models.question import Question
-from app.models.school import ClassMember, Organization, OrganizationApplication, OrganizationMember, SchoolClass
+from app.models.school import (
+    ClassMember,
+    Invitation,
+    JoinCode,
+    JoinRequest,
+    LicenseSeat,
+    Organization,
+    OrganizationApplication,
+    OrganizationLicense,
+    OrganizationMember,
+    SchoolClass,
+)
 from app.models.user import User
 
 __all__ = [
@@ -15,12 +26,17 @@ __all__ = [
     "AuthSession",
     "AuthToken",
     "ClassMember",
+    "Invitation",
+    "JoinCode",
+    "JoinRequest",
+    "LicenseSeat",
     "CurriculumTopic",
     "Lesson",
     "LessonProgress",
     "LessonVersion",
     "Organization",
     "OrganizationApplication",
+    "OrganizationLicense",
     "OrganizationMember",
     "PracticeAnswer",
     "PracticeSession",

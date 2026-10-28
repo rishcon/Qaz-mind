@@ -126,6 +126,26 @@
 
 Решения аудируются (`school_application.approve/reject`). Письма заявителю о решении пока не отправляются.
 
+### Приглашения, коды классов, лицензии (этап 7)
+
+Токен приглашения и код класса хранятся только в виде хеша. Приглашение отправляется письмом (в разработке — в Mailpit), ссылка `…/invite?token=…`. Принять его может только вошедший пользователь с тем же email; отозванное, просроченное и использованное приглашение не работает по сохранённой ссылке (410). Повторная отправка заменяет токен: прежняя ссылка перестаёт работать.
+
+| Метод | Путь | Кто | Назначение |
+|---|---|---|---|
+| GET/POST | `/organizations/{org}/invitations` | список — админ школы; создание — админ школы (учитель или ученик) и учитель (ученик в свой класс) | `{email, role: TEACHER/STUDENT, class_id?}`; для ученика класс обязателен; дубль даёт 409 `INVITATION_EXISTS` |
+| POST | `/organizations/{org}/invitations/{id}/resend` · `/revoke` | админ школы | |
+| POST | `/invitations/accept` | вошедший пользователь | `{token}`; ошибки: 404 `INVITATION_INVALID`, 410 `INVITATION_REVOKED/USED/EXPIRED`, 403 `INVITATION_EMAIL_MISMATCH` |
+| GET/POST | `/organizations/{org}/classes/{id}/join-codes` | админ школы, учитель класса | `{valid_days 1–60, max_uses 1–1000}`; полный код (`XXXX-XXXX`) возвращается только при создании |
+| POST | `…/join-codes/{code}/revoke` | то же | |
+| POST | `/classes/join-requests` | любой вошедший | `{code}`; создаёт заявку `pending`; любой негодный код (неизвестный, отозванный, просроченный, исчерпанный) даёт одинаковый 404 `CODE_INVALID` |
+| GET | `/me/join-requests` · `/me/school-classes` | ученик | свои заявки и классы |
+| GET | `/organizations/{org}/classes/{id}/join-requests` · `/students` | админ школы, учитель класса | |
+| POST | `/classes/join-requests/{id}/approve` · `/reject` | админ школы, учитель класса | одобрение занимает место лицензии |
+| POST | `/organizations/{org}/classes/{id}/students/{user}/remove` | то же | освобождает место, если ученик не состоит в других классах школы; личный прогресс не затрагивается |
+| GET | `/organizations/{org}/licenses` | админ школы | места: `seat_limit`, `seats_used`, `current` |
+
+Платформа: `GET/POST /admin/organizations/{id}/licenses` (чтение — `schools.read`, создание и `…/{lid}/cancel` — `finance.manage`, аудит `license.create/cancel`). Место нужно только ученику; без действующей лицензии вступление ученика в класс даёт 409 `NO_LICENSE`, при исчерпанном лимите — 409 `NO_SEATS`. Места считаются под блокировкой строки лицензии (параллельные одобрения не превышают лимит; проверено тестом). Платежи не подключены: лицензию записывает сотрудник платформы.
+
 ## 2. Запланировано: административный API
 
 Пути согласованы с `packages/contracts/src/admin.ts` (`ADMIN_ENDPOINTS`). **На сервере их пока нет.** Админка к ним не обращается: данных не показывает, записи отказывают (см. `INTEGRATION.md`). Модель доступа — в `ADMIN_ACCESS.md`. Ниже — предлагаемые параметры; окончательные поля уточняются при создании Pydantic-схем.

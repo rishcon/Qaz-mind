@@ -115,3 +115,107 @@ class ClassMember(Base):
     role: Mapped[str] = mapped_column(String(8))
     status: Mapped[str] = mapped_column(String(8), default="active")
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Invitation(Base):
+    """An e-mail invitation to a school. Only the hash of the token is stored; the token travels in the e-mail."""
+
+    __tablename__ = "invitations"
+    __table_args__ = (
+        CheckConstraint("role IN ('TEACHER', 'STUDENT')", name="role_valid"),
+        CheckConstraint("status IN ('pending', 'accepted', 'revoked')", name="status_valid"),
+        CheckConstraint("email = lower(email)", name="email_normalized"),
+        Index("ix_invitations_org", "organization_id", "status"),
+        Index("uq_invitations_token_hash", "token_hash", unique=True),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id", ondelete="CASCADE"))
+    class_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("school_classes.id", ondelete="CASCADE"), nullable=True)
+    role: Mapped[str] = mapped_column(String(8))
+    email: Mapped[str] = mapped_column(String(254))
+    token_hash: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(10), default="pending")
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    accepted_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"), nullable=True)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class JoinCode(Base):
+    """A class code. The code itself is shown once at creation; only its hash and a short hint are stored."""
+
+    __tablename__ = "join_codes"
+    __table_args__ = (
+        CheckConstraint("max_uses BETWEEN 1 AND 1000", name="max_uses_range"),
+        CheckConstraint("uses_count >= 0", name="uses_count_non_negative"),
+        Index("uq_join_codes_code_hash", "code_hash", unique=True),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    class_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("school_classes.id", ondelete="CASCADE"))
+    code_hash: Mapped[str] = mapped_column(String(64))
+    code_hint: Mapped[str] = mapped_column(String(8))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    max_uses: Mapped[int] = mapped_column(Integer)
+    uses_count: Mapped[int] = mapped_column(Integer, default=0)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class JoinRequest(Base):
+    __tablename__ = "join_requests"
+    __table_args__ = (
+        CheckConstraint("status IN ('pending', 'approved', 'rejected')", name="status_valid"),
+        Index(
+            "uq_join_requests_one_pending",
+            "class_id",
+            "user_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    class_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("school_classes.id", ondelete="CASCADE"))
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="CASCADE"))
+    status: Mapped[str] = mapped_column(String(10), default="pending")
+    decided_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class OrganizationLicense(Base):
+    """Seats an organization may use for students. Billing is not connected: the platform records the licence."""
+
+    __tablename__ = "organization_licenses"
+    __table_args__ = (
+        CheckConstraint("status IN ('active', 'cancelled')", name="status_valid"),
+        CheckConstraint("seat_limit >= 1", name="seat_limit_positive"),
+        CheckConstraint("expires_at > starts_at", name="period_valid"),
+        Index("ix_organization_licenses_org", "organization_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id", ondelete="CASCADE"))
+    plan: Mapped[str] = mapped_column(String(40))
+    seat_limit: Mapped[int] = mapped_column(Integer)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(10), default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class LicenseSeat(Base):
+    __tablename__ = "license_seats"
+    __table_args__ = (
+        Index("uq_license_seats_active", "license_id", "user_id", unique=True, postgresql_where=text("revoked_at IS NULL")),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    license_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organization_licenses.id", ondelete="CASCADE"))
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="CASCADE"))
+    assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
