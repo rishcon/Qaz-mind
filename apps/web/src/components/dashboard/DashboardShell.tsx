@@ -10,7 +10,6 @@ import {
   AlertCircle,
   BarChart2,
   Settings,
-  ExternalLink,
   LogOut,
   User,
 } from 'lucide-react';
@@ -22,7 +21,6 @@ interface DashboardShellProps {
   onLanguageChange: (lang: Language) => void;
   profile: StudentProfile;
   mistakesCount?: number;
-  onBackToLanding: () => void;
   onLogout: () => void;
   children: React.ReactNode;
 }
@@ -34,7 +32,6 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   onLanguageChange,
   profile,
   mistakesCount = 0,
-  onBackToLanding,
   onLogout,
   children,
 }) => {
@@ -187,17 +184,6 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
           >
             <Settings className="w-4 h-4 text-[#74736F]" />
             <span>{currentLang === 'ru' ? 'Настройки' : 'Баптаулар'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onBackToLanding}
-            className="w-full flex items-center justify-between px-3.5 py-2 text-xs font-medium text-[#74736F] hover:bg-[#EAE7DF] hover:text-[#171717] rounded transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-3">
-              <ExternalLink className="w-4 h-4 text-[#74736F]" />
-              <span>{currentLang === 'ru' ? 'На главную' : 'Басты бетке'}</span>
-            </div>
           </button>
 
           {/* Student Profile Card */}

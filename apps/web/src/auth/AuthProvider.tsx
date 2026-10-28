@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { ApiError } from '../api/client';
+import { ApiError, setUnauthorizedHandler } from '../api/client';
 import { ApiProfile, ApiUser, MeResponse, authApi, profileApi } from '../api/endpoints';
 
 // The server is the only source of identity. Nothing about the user is read from localStorage.
@@ -83,6 +83,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const clearSession = useCallback(() => setState(ANONYMOUS), []);
+
+  // An expired session: any 401 returns the app to the anonymous state, and the route guard opens the login page.
+  useEffect(() => {
+    setUnauthorizedHandler(clearSession);
+    return () => setUnauthorizedHandler(null);
+  }, [clearSession]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

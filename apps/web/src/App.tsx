@@ -297,6 +297,14 @@ export default function App() {
     }
   }, [currentRoute, auth.status, auth.user, onboardingCompleted]);
 
+  // A signed-in student has no use for the public pages: the landing and the login/register forms lead to the dashboard.
+  useEffect(() => {
+    if (auth.status === 'loading' || !auth.user) return;
+    if (currentRoute === 'landing' || currentRoute === 'login' || currentRoute === 'register') {
+      navigateTo(onboardingCompleted ? 'app' : 'onboarding', onboardingCompleted ? '/app' : '/onboarding');
+    }
+  }, [currentRoute, auth.status, auth.user, onboardingCompleted]);
+
   // Opens a session returned by the server. The URL is changed first: the app remounts for the new user
   // and reads its screen from the URL.
   const openSession = async (me: MeResponse) => {
@@ -566,7 +574,6 @@ export default function App() {
         onLanguageChange={setCurrentLang}
         profile={profile}
         mistakesCount={unresolvedMistakesCount}
-        onBackToLanding={() => navigateTo('landing', '/')}
         onLogout={handleLogout}
       >
         {dashboardView === 'today' && (

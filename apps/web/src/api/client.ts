@@ -11,8 +11,15 @@ export type { ApiErrorDetail };
 
 const configuredBase = (import.meta.env?.VITE_API_BASE_URL ?? '').trim();
 
+// The auth provider registers a handler that drops the local session when the server answers 401.
+let unauthorizedHandler: (() => void) | null = null;
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  unauthorizedHandler = handler;
+}
+
 const client = createApiClient({
   baseUrl: configuredBase || '/api/v1',
+  onUnauthorized: () => unauthorizedHandler?.(),
 });
 
 export function apiRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
