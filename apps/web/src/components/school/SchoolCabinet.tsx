@@ -3,6 +3,7 @@ import { ArrowLeft } from 'lucide-react';
 import { ApiInvitation, ApiLicense, ApiMembership, ApiSchoolClass, ApiTeacher, schoolApi } from '../../api/endpoints';
 import { errorText } from '../../api/client';
 import { ClassPanel } from './ClassPanel';
+import { AssignmentsTab } from './AssignmentsTab';
 
 interface SchoolCabinetProps {
   onExit: () => void;
@@ -28,7 +29,7 @@ function currentAcademicYear(): string {
 export const SchoolCabinet: React.FC<SchoolCabinetProps> = ({ onExit, onApply }) => {
   const [memberships, setMemberships] = useState<ApiMembership[] | null>(null);
   const [orgId, setOrgId] = useState('');
-  const [tab, setTab] = useState<'classes' | 'teachers'>('classes');
+  const [tab, setTab] = useState<'classes' | 'teachers' | 'assignments'>('classes');
   const [classes, setClasses] = useState<ApiSchoolClass[]>([]);
   const [teachers, setTeachers] = useState<ApiTeacher[]>([]);
   const [invitations, setInvitations] = useState<ApiInvitation[]>([]);
@@ -157,20 +158,18 @@ export const SchoolCabinet: React.FC<SchoolCabinetProps> = ({ onExit, onApply })
                     {membership.organization.city} · {ROLE_TEXT[membership.role]}
                   </p>
                 </div>
-                {isAdmin && (
-                  <div className="flex gap-1 bg-white p-1 rounded-sm border border-[#E2DED5] text-xs font-mono font-bold">
-                    {(['classes', 'teachers'] as const).map((id) => (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => setTab(id)}
-                        className={`px-3 py-1.5 cursor-pointer ${tab === id ? 'bg-[#171717] text-white' : 'text-[#74736F]'}`}
-                      >
-                        {id === 'classes' ? 'Классы' : 'Учителя'}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <div className="flex gap-1 bg-white p-1 rounded-sm border border-[#E2DED5] text-xs font-mono font-bold">
+                  {(isAdmin ? (['classes', 'teachers', 'assignments'] as const) : (['classes', 'assignments'] as const)).map((id) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setTab(id)}
+                      className={`px-3 py-1.5 cursor-pointer ${tab === id ? 'bg-[#171717] text-white' : 'text-[#74736F]'}`}
+                    >
+                      {id === 'classes' ? 'Классы' : id === 'teachers' ? 'Учителя' : 'Задания'}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {membership.organization.status !== 'active' && (
@@ -184,7 +183,9 @@ export const SchoolCabinet: React.FC<SchoolCabinetProps> = ({ onExit, onApply })
                 </div>
               )}
 
-              {tab === 'classes' || !isAdmin ? (
+              {tab === 'assignments' ? (
+                <AssignmentsTab orgId={orgId} classes={classes} writable={!!membership?.organization && membership.organization.status === 'active'} />
+              ) : tab === 'classes' || !isAdmin ? (
                 <section className="space-y-4">
                   {writable && (
                     <form onSubmit={createClass} className="bg-white border border-[#E2DED5] p-4 rounded-sm flex flex-wrap gap-3 items-end">

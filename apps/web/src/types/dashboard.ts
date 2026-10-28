@@ -5,6 +5,7 @@ export type DashboardView =
   | 'practice'
   | 'mock_exam'
   | 'mistakes'
+  | 'assignments'
   | 'progress'
   | 'settings';
 

@@ -9,6 +9,8 @@ import { UnavailablePage } from './components/common/UnavailablePage';
 import { SchoolApplyPage } from './components/school/SchoolApplyPage';
 import { SchoolCabinet } from './components/school/SchoolCabinet';
 import { AcceptInvitePage } from './components/school/AcceptInvitePage';
+import { AssignmentsView } from './components/dashboard/AssignmentsView';
+import { FocusAssignment } from './components/focus/FocusAssignment';
 import { ResetPasswordPage } from './components/auth/ResetPasswordPage';
 
 // Landing Page Components
@@ -108,7 +110,8 @@ type AppRoute =
   | 'focus_practice'
   | 'focus_exam'
   | 'focus_exam_results'
-  | 'focus_mistake_review';
+  | 'focus_mistake_review'
+  | 'focus_assignment';
 
 /** Subject and lesson from /learn/<subject>/<lesson>, so a reload keeps the lesson the user opened. */
 const lessonFromPath = (): string => {
@@ -120,6 +123,12 @@ const lessonFromPath = (): string => {
 const practiceSessionFromPath = (): string => {
   const [, section = '', kind = '', id = ''] = window.location.pathname.split('/');
   return section === 'practice' && kind === 'session' ? id : '';
+};
+
+/** Attempt id from /assignment/<id>, so a reload returns to the same attempt. */
+const assignmentAttemptFromPath = (): string => {
+  const [, section = '', id = ''] = window.location.pathname.split('/');
+  return section === 'assignment' ? id : '';
 };
 
 /** Question id from /review/<id>, so a reload returns to the same mistake. */
@@ -151,6 +160,7 @@ export default function App() {
     if (path.startsWith('/exam/session')) return 'focus_exam';
     if (path.startsWith('/exam/results')) return 'focus_exam_results';
     if (path.startsWith('/review')) return 'focus_mistake_review';
+    if (path.startsWith('/assignment/')) return 'focus_assignment';
 
     if (path === '/home') return 'landing';
 
@@ -200,6 +210,7 @@ export default function App() {
   const [practiceSubjectId, setPracticeSubjectId] = useState<string>('');
   const [practicedCount, setPracticedCount] = useState(0);
   const [activeMistakeId, setActiveMistakeId] = useState<string>(mistakeFromPath);
+  const [activeAttemptId, setActiveAttemptId] = useState<string>(assignmentAttemptFromPath);
 
   // URL synchronization helper
   const navigateTo = (route: AppRoute, pathUrl?: string) => {
@@ -221,6 +232,7 @@ export default function App() {
       setActiveLessonSlug(lessonFromPath());
       setActivePracticeSessionId(practiceSessionFromPath());
       setActiveMistakeId(mistakeFromPath());
+      setActiveAttemptId(assignmentAttemptFromPath());
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -275,12 +287,17 @@ export default function App() {
 
   // The school workspace link appears only for people who have a school membership on the server.
   const [hasSchool, setHasSchool] = useState(false);
+  const [hasStudentClass, setHasStudentClass] = useState(false);
   useEffect(() => {
     if (!auth.user || currentRoute !== 'app') return;
     schoolApi
       .myOrganizations()
       .then((items) => setHasSchool(items.length > 0))
       .catch(() => setHasSchool(false));
+    schoolApi
+      .mySchoolClasses()
+      .then((items) => setHasStudentClass(items.length > 0))
+      .catch(() => setHasStudentClass(false));
   }, [auth.user?.id, currentRoute]);
 
   // Auth gating: personal study and focus screens need a session; study needs a completed onboarding.
@@ -292,6 +309,7 @@ export default function App() {
     'focus_exam',
     'focus_exam_results',
     'focus_mistake_review',
+    'focus_assignment',
   ];
   useEffect(() => {
     // The school workspace needs a session, but not a finished student onboarding.
@@ -584,6 +602,20 @@ export default function App() {
     );
   }
 
+  if (currentRoute === 'focus_assignment') {
+    return (
+      <FocusAssignment
+        attemptId={activeAttemptId}
+        currentLang={currentLang}
+        contentLang={profile.examLanguage}
+        onExit={() => {
+          navigateTo('app', '/app');
+          setDashboardView('assignments');
+        }}
+      />
+    );
+  }
+
   if (currentRoute === 'focus_mistake_review') {
     const mistake = mistakesList.find((m) => m.id === activeMistakeId);
     if (!mistake) {
@@ -636,6 +668,7 @@ export default function App() {
         mistakesCount={unresolvedMistakesCount}
         onLogout={handleLogout}
         onOpenSchool={hasSchool ? () => navigateTo('school', '/school') : undefined}
+        showAssignments={hasStudentClass}
       >
         {dashboardView === 'today' && (
           <TodayView
@@ -667,6 +700,16 @@ export default function App() {
             initialSubjectId={practiceSubjectId}
             onNavigate={setDashboardView}
             onStarted={handlePracticeStarted}
+          />
+        )}
+
+        {dashboardView === 'assignments' && (
+          <AssignmentsView
+            currentLang={currentLang}
+            onOpenAttempt={(attemptId) => {
+              setActiveAttemptId(attemptId);
+              navigateTo('focus_assignment', `/assignment/${attemptId}`);
+            }}
           />
         )}
 

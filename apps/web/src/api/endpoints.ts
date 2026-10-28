@@ -357,6 +357,120 @@ export const schoolApi = {
   mySchoolClasses: () => apiRequest<ApiMyClass[]>('GET', '/me/school-classes'),
 };
 
+// ----- school assignments ---------------------------------------------------------------------------------
+
+export interface ApiAssignmentInput {
+  title: string;
+  subject_id: string;
+  question_count: number;
+  class_ids: string[];
+  due_at: string | null;
+  max_attempts: number;
+  score_policy: 'best' | 'last';
+  reveal: 'after_submit' | 'after_close';
+}
+
+export interface ApiAssignment extends ApiAssignmentInput {
+  id: string;
+  status: 'draft' | 'published' | 'closed' | 'archived';
+  created_by: string;
+  created_at: string;
+  published_at: string | null;
+  closed_at: string | null;
+  submitted_count: number;
+}
+
+export interface ApiResultRow {
+  student_id: string;
+  name: string;
+  email: string;
+  class_id: string;
+  class_name: string;
+  state: 'not_started' | 'in_progress' | 'submitted';
+  attempts: number;
+  best_score: number | null;
+  last_score: number | null;
+  final_score: number | null;
+  max_score: number | null;
+  last_submitted_at: string | null;
+}
+
+export interface ApiAssignmentResults {
+  assignment: ApiAssignment;
+  score_policy: 'best' | 'last';
+  rows: ApiResultRow[];
+  submitted: number;
+  total_students: number;
+  average_final: number | null;
+}
+
+export interface ApiMyAssignment {
+  id: string;
+  title: string;
+  subject_id: string;
+  organization_name: string;
+  class_name: string;
+  question_count: number;
+  due_at: string | null;
+  max_attempts: number;
+  score_policy: 'best' | 'last';
+  status: 'published' | 'closed';
+  attempts: { id: string; number: number; submitted: boolean; score: number | null; max_score: number | null }[];
+  can_start: boolean;
+  in_progress_attempt_id: string | null;
+  final_score: number | null;
+  max_score: number | null;
+  result_visible: boolean;
+}
+
+export interface ApiAttemptReview {
+  selected_label: string | null;
+  correct_label: string;
+  is_correct: boolean;
+  explanation_ru: string;
+  explanation_kz: string;
+}
+
+export interface ApiAttempt {
+  id: string;
+  assignment_id: string;
+  title: string;
+  number: number;
+  started_at: string;
+  submitted_at: string | null;
+  due_at: string | null;
+  total: number;
+  answered: number;
+  score: number | null;
+  max_score: number | null;
+  result_visible: boolean;
+  items: { question: ApiPracticeQuestion; selected_label: string | null; review: ApiAttemptReview | null }[];
+}
+
+const orgPath = (orgId: string) => `/organizations/${encodeURIComponent(orgId)}/assignments`;
+
+export const assignmentApi = {
+  list: (orgId: string) => apiRequest<ApiAssignment[]>('GET', orgPath(orgId)),
+  create: (orgId: string, body: ApiAssignmentInput) => apiRequest<ApiAssignment>('POST', orgPath(orgId), body),
+  update: (orgId: string, id: string, body: ApiAssignmentInput) =>
+    apiRequest<ApiAssignment>('PUT', `${orgPath(orgId)}/${encodeURIComponent(id)}`, body),
+  action: (orgId: string, id: string, action: 'publish' | 'close' | 'archive') =>
+    apiRequest<ApiAssignment>('POST', `${orgPath(orgId)}/${encodeURIComponent(id)}/${action}`, {}),
+  results: (orgId: string, id: string) =>
+    apiRequest<ApiAssignmentResults>('GET', `${orgPath(orgId)}/${encodeURIComponent(id)}/results`),
+  // the student's side
+  mine: () => apiRequest<ApiMyAssignment[]>('GET', '/me/school-assignments'),
+  start: (id: string) => apiRequest<ApiAttempt>('POST', `/school-assignments/${encodeURIComponent(id)}/attempts`, {}),
+  attempt: (attemptId: string) => apiRequest<ApiAttempt>('GET', `/school-assignments/attempts/${encodeURIComponent(attemptId)}`),
+  answer: (attemptId: string, questionId: string, label: OptionLabel) =>
+    apiRequest<void>('POST', `/school-assignments/attempts/${encodeURIComponent(attemptId)}/answers`, {
+      question_id: questionId,
+      selected_label: label,
+    }),
+  finish: (attemptId: string) =>
+    apiRequest<ApiAttempt>('POST', `/school-assignments/attempts/${encodeURIComponent(attemptId)}/finish`, {}),
+};
+
 export interface ApiInvitation {
   id: string;
   email: string;

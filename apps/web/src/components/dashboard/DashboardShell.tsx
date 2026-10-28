@@ -25,6 +25,8 @@ interface DashboardShellProps {
   onLogout: () => void;
   /** Set only when the person has a school membership: opens the school workspace. */
   onOpenSchool?: () => void;
+  /** Set only when the student is in a school class: shows the school assignments entry. */
+  showAssignments?: boolean;
   children: React.ReactNode;
 }
 
@@ -37,6 +39,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   mistakesCount = 0,
   onLogout,
   onOpenSchool,
+  showAssignments = false,
   children,
 }) => {
   const navItems = [
@@ -77,6 +80,16 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       icon: <AlertCircle className="w-4 h-4" />,
       badge: mistakesCount > 0 ? String(mistakesCount) : undefined,
     },
+    ...(showAssignments
+      ? [
+          {
+            id: 'assignments' as DashboardView,
+            labelRu: 'Задания школы',
+            labelKz: 'Мектеп тапсырмалары',
+            icon: <Building2 className="w-4 h-4" />,
+          },
+        ]
+      : []),
     {
       id: 'progress' as DashboardView,
       labelRu: 'Прогресс',
@@ -99,6 +112,8 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
         return currentLang === 'ru' ? 'Пробное ЕНТ' : 'Байқау ҰБТ-сы';
       case 'mistakes':
         return currentLang === 'ru' ? 'Мои ошибки' : 'Менің қателерім';
+      case 'assignments':
+        return currentLang === 'ru' ? 'Задания школы' : 'Мектеп тапсырмалары';
       case 'progress':
         return currentLang === 'ru' ? 'Мой прогресс' : 'Менің прогресім';
       case 'settings':
