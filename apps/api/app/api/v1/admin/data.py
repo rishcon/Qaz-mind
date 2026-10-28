@@ -102,6 +102,16 @@ async def overview(ctx: StaffDep, db=Depends(get_db)) -> dict:
         attention.append({"id": "pending_invitations", "title": "Приглашения сотрудников не приняты",
                           "count": pending_invitations, "action_url": "/admin/roles"})
 
+    if "schools.read" in ctx.permissions:
+        from app.models import OrganizationApplication
+
+        pending_schools = (
+            await scalar(select(func.count()).select_from(OrganizationApplication).where(OrganizationApplication.status == "pending"))
+        ).scalar_one()
+        if pending_schools:
+            attention.append({"id": "school_applications", "title": "Заявки школ ждут решения",
+                              "count": pending_schools, "action_url": "/admin/schools"})
+
     recent = []
     if "audit.read" in ctx.permissions:
         rows = (await scalar(select(AuditEvent).order_by(AuditEvent.id.desc()).limit(8))).scalars().all()

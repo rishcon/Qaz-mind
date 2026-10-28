@@ -169,7 +169,7 @@ class SchoolAccessService:
 
     def _invitation_mail(self, invitation: Invitation, organization: Organization, raw: str) -> OutgoingEmail:
         link = f"{self.settings.public_app_url}/invite?token={raw}"
-        who = "учителем" if invitation.role == "TEACHER" else "учеником"
+        who = {"TEACHER": "учителем", "SCHOOL_ADMIN": "администратором школы"}.get(invitation.role, "учеником")
         return OutgoingEmail(
             to=invitation.email,
             subject=f"QazMind: приглашение в «{organization.name}»",
@@ -189,8 +189,8 @@ class SchoolAccessService:
     async def invite(
         self, actor: OrganizationMember, organization: Organization, actor_user_id: uuid.UUID, body: InvitationIn, assigned_class_ids: set[uuid.UUID]
     ) -> Invitation:
-        if body.role == "TEACHER" and actor.role != "SCHOOL_ADMIN":
-            raise AppError(403, "FORBIDDEN", "Учителей приглашает администратор школы")
+        if body.role in ("TEACHER", "SCHOOL_ADMIN") and actor.role != "SCHOOL_ADMIN":
+            raise AppError(403, "FORBIDDEN", "Учителей и администраторов приглашает администратор школы")
         if body.role == "STUDENT":
             if body.class_id is None:
                 raise AppError(422, "CLASS_REQUIRED", "Для приглашения ученика укажите класс")
@@ -273,7 +273,15 @@ class SchoolAccessService:
         if organization is None or organization.status != "active":
             raise AppError(403, "ORGANIZATION_NOT_ACTIVE", "Организация приостановлена или в архиве")
 
-        if invitation.role == "TEACHER":
+        if invitation.role == "SCHOOL_ADMIN":
+            member = await self.db.scalar(
+                select(OrganizationMember).where(OrganizationMember.organization_id == organization.id, OrganizationMember.user_id == user.id)
+            )
+            if member is None:
+                self.db.add(OrganizationMember(organization_id=organization.id, user_id=user.id, role="SCHOOL_ADMIN"))
+            else:
+                member.role, member.status, member.revoked_at = "SCHOOL_ADMIN", "active", None
+        elif invitation.role == "TEACHER":
             member = await self.db.scalar(
                 select(OrganizationMember).where(OrganizationMember.organization_id == organization.id, OrganizationMember.user_id == user.id)
             )
@@ -399,6 +407,47 @@ class SchoolAccessService:
         return request
 
     # ----- members ------------------------------------------------------------------------------------------
+
+    async def revoke_member(self, org_id: uuid.UUID, user_id: uuid.UUID, acting_user_id: uuid.UUID) -> None:
+        """Takes a teacher or administrator out of the school. The last administrator cannot be removed."""
+        member = await self.db.scalar(
+            select(OrganizationMember).where(
+                OrganizationMember.organization_id == org_id, OrganizationMember.user_id == user_id, OrganizationMember.status == "active"
+            )
+        )
+        if member is None:
+            raise AppError(404, "NOT_FOUND", "Сотрудник школы не найден")
+        if member.role == "SCHOOL_ADMIN":
+            admins = await self.db.scalar(
+                select(func.count()).select_from(OrganizationMember).where(
+                    OrganizationMember.organization_id == org_id, OrganizationMember.role == "SCHOOL_ADMIN", OrganizationMember.status == "active"
+                )
+            )
+            if (admins or 0) <= 1:
+                raise AppError(409, "LAST_ADMIN", "Нельзя убрать единственного администратора школы")
+        member.status, member.revoked_at = "revoked", utcnow()
+        links = await self.db.execute(
+            select(ClassMember)
+            .join(SchoolClass, SchoolClass.id == ClassMember.class_id)
+            .where(SchoolClass.organization_id == org_id, ClassMember.user_id == user_id, ClassMember.role == "teacher")
+        )
+        for link in links.scalars():
+            link.status = "removed"
+        await self.db.commit()
+
+    async def org_students(self, org_id: uuid.UUID) -> list[dict]:
+        rows = await self.db.execute(
+            select(User, SchoolClass)
+            .join(ClassMember, ClassMember.user_id == User.id)
+            .join(SchoolClass, SchoolClass.id == ClassMember.class_id)
+            .where(SchoolClass.organization_id == org_id, ClassMember.role == "student", ClassMember.status == "active")
+            .order_by(SchoolClass.name, User.name)
+        )
+        return [
+            {"user_id": str(u.id), "name": u.name, "email": u.email, "class_id": str(c.id), "class_name": c.name}
+            for u, c in rows.all()
+        ]
+
 
     async def students(self, class_id: uuid.UUID) -> list[ClassStudentOut]:
         rows = await self.db.execute(

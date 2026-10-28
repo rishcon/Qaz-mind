@@ -122,7 +122,7 @@ class Invitation(Base):
 
     __tablename__ = "invitations"
     __table_args__ = (
-        CheckConstraint("role IN ('TEACHER', 'STUDENT')", name="role_valid"),
+        CheckConstraint("role IN ('SCHOOL_ADMIN', 'TEACHER', 'STUDENT')", name="role_valid"),
         CheckConstraint("status IN ('pending', 'accepted', 'revoked')", name="status_valid"),
         CheckConstraint("email = lower(email)", name="email_normalized"),
         Index("ix_invitations_org", "organization_id", "status"),
@@ -132,7 +132,7 @@ class Invitation(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id", ondelete="CASCADE"))
     class_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("school_classes.id", ondelete="CASCADE"), nullable=True)
-    role: Mapped[str] = mapped_column(String(8))
+    role: Mapped[str] = mapped_column(String(12))
     email: Mapped[str] = mapped_column(String(254))
     token_hash: Mapped[str] = mapped_column(String(64))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

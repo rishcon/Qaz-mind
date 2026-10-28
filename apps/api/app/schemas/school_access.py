@@ -10,7 +10,7 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 class InvitationIn(BaseModel):
     email: str = Field(max_length=254)
-    role: Literal["TEACHER", "STUDENT"]
+    role: Literal["SCHOOL_ADMIN", "TEACHER", "STUDENT"]
     class_id: uuid.UUID | None = None
 
     @field_validator("email")

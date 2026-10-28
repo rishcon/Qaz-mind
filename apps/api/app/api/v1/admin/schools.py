@@ -1,5 +1,6 @@
 """Moderation of school applications and the list of organizations (platform staff only)."""
 
+import logging
 import uuid
 from typing import Annotated, Literal
 
@@ -8,14 +9,26 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.service import StaffContext, write_audit
-from app.api.deps import get_db
+from app.api.deps import get_db, get_mailer, get_settings
 from app.api.v1.admin.deps import MetaDep, require
 from app.core.time import utcnow
-from app.models import ClassMember, LicenseSeat, Organization, OrganizationLicense, OrganizationMember, SchoolClass
+from app.models import ClassMember, LicenseSeat, Organization, OrganizationLicense, OrganizationMember, SchoolClass, User
+from app.services.mail import MailDeliveryError, OutgoingEmail
 from app.schemas.school import ApplicationOut, RejectIn
 from app.services.school import SchoolService
 
 router = APIRouter(tags=["admin-schools"])
+logger = logging.getLogger("qazmind.schools")
+
+
+async def _notify(mailer, to: str, subject: str, text: str) -> bool:
+    """The decision is already saved; a failed e-mail is reported to the staff member, not rolled back."""
+    try:
+        await mailer.send(OutgoingEmail(to=to, subject=subject, text=text))
+        return True
+    except MailDeliveryError:
+        logger.warning("school decision e-mail to %s was not delivered", to)
+        return False
 
 
 def _row(application, applicant) -> dict:
@@ -40,6 +53,8 @@ async def approve_application(
     ctx: Annotated[StaffContext, Depends(require("schools.approve"))],
     meta: MetaDep,
     db: Annotated[AsyncSession, Depends(get_db)],
+    settings=Depends(get_settings),
+    mailer=Depends(get_mailer),
 ) -> dict:
     application = await SchoolService(db).approve(application_id, ctx.staff.id)
     await write_audit(
@@ -52,7 +67,17 @@ async def approve_application(
         {"organization_id": str(application.organization_id), "school_name": application.school_name},
     )
     await db.commit()
-    return {"status": application.status, "organization_id": str(application.organization_id)}
+    applicant = await db.get(User, application.applicant_user_id)
+    sent = await _notify(
+        mailer,
+        applicant.email,
+        "QazMind: заявка школы одобрена",
+        f"Заявка «{application.school_name}» одобрена. Вы администратор школы.\n\n"
+        f"Откройте кабинет школы: {settings.public_app_url}/school\n"
+        "Дальше: создайте классы, пригласите учителей и выдайте ученикам код класса. "
+        "Чтобы ученики могли вступать в классы, платформа должна выдать школе лицензию: мы свяжемся с вами.",
+    )
+    return {"status": application.status, "organization_id": str(application.organization_id), "email_sent": sent}
 
 
 @router.post("/school-applications/{application_id}/reject")
@@ -62,6 +87,7 @@ async def reject_application(
     ctx: Annotated[StaffContext, Depends(require("schools.approve"))],
     meta: MetaDep,
     db: Annotated[AsyncSession, Depends(get_db)],
+    mailer=Depends(get_mailer),
 ) -> dict:
     application = await SchoolService(db).reject(application_id, ctx.staff.id, body.reason)
     await write_audit(
@@ -74,7 +100,15 @@ async def reject_application(
         {"reason": body.reason, "school_name": application.school_name},
     )
     await db.commit()
-    return {"status": application.status}
+    applicant = await db.get(User, application.applicant_user_id)
+    sent = await _notify(
+        mailer,
+        applicant.email,
+        "QazMind: заявка школы отклонена",
+        f"Заявка «{application.school_name}» отклонена.\nПричина: {body.reason}\n\n"
+        "Можно подать новую заявку с исправленными данными.",
+    )
+    return {"status": application.status, "email_sent": sent}
 
 
 @router.get("/organizations")

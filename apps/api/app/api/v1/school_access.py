@@ -232,3 +232,83 @@ async def organization_licenses(org_id: uuid.UUID, ctx: CurrentDep, access: Acce
     await _school(access).member_of(ctx.user.id, org_id, ADMIN)
     return await access.licenses(org_id)
 
+
+
+# ----- people and the school overview ------------------------------------------------------------------------
+
+
+@router.post("/organizations/{org_id}/members/{user_id}/revoke", status_code=204)
+async def revoke_member(org_id: uuid.UUID, user_id: uuid.UUID, ctx: CurrentDep, access: AccessDep) -> None:
+    school = _school(access)
+    organization, _ = await school.member_of(ctx.user.id, org_id, ADMIN)
+    school.require_active(organization)
+    await access.revoke_member(org_id, user_id, ctx.user.id)
+
+
+@router.get("/organizations/{org_id}/students")
+async def organization_students(org_id: uuid.UUID, ctx: CurrentDep, access: AccessDep) -> list[dict]:
+    await _school(access).member_of(ctx.user.id, org_id, ADMIN)
+    return await access.org_students(org_id)
+
+
+@router.get("/organizations/{org_id}/overview")
+async def organization_overview(org_id: uuid.UUID, ctx: CurrentDep, access: AccessDep) -> dict:
+    """Numbers for the school's start page, counted for the classes the caller may see."""
+    from sqlalchemy import func
+
+    from app.models import Assignment, AssignmentClass, OrganizationMember
+
+    school = _school(access)
+    _, member = await school.member_of(ctx.user.id, org_id)
+    classes = await school.list_classes(org_id, member)
+    class_ids = [c.id for c in classes]
+    db = access.db
+    pending = 0
+    if class_ids:
+        pending = (
+            await db.scalar(
+                select(func.count()).select_from(JoinRequest).where(JoinRequest.class_id.in_(class_ids), JoinRequest.status == "pending")
+            )
+            or 0
+        )
+    assignments = {"draft": 0, "published": 0, "closed": 0}
+    if class_ids:
+        rows = await db.execute(
+            select(Assignment.status, func.count(func.distinct(Assignment.id)))
+            .join(AssignmentClass, AssignmentClass.assignment_id == Assignment.id)
+            .where(AssignmentClass.class_id.in_(class_ids), Assignment.organization_id == org_id)
+            .group_by(Assignment.status)
+        )
+        for status, n in rows.all():
+            if status in assignments:
+                assignments[status] = n
+    teachers = admins = 0
+    licence = None
+    if member.role == "SCHOOL_ADMIN":
+        teachers = (
+            await db.scalar(
+                select(func.count()).select_from(OrganizationMember).where(
+                    OrganizationMember.organization_id == org_id, OrganizationMember.role == "TEACHER", OrganizationMember.status == "active"
+                )
+            )
+            or 0
+        )
+        admins = (
+            await db.scalar(
+                select(func.count()).select_from(OrganizationMember).where(
+                    OrganizationMember.organization_id == org_id, OrganizationMember.role == "SCHOOL_ADMIN", OrganizationMember.status == "active"
+                )
+            )
+            or 0
+        )
+        current = [lic for lic in await access.licenses(org_id) if lic.current]
+        licence = current[0].model_dump(mode="json") if current else None
+    return {
+        "classes": len([c for c in classes if c.status == "active"]),
+        "students": sum(c.student_count for c in classes),
+        "teachers": teachers,
+        "admins": admins,
+        "pending_join_requests": pending,
+        "assignments": assignments,
+        "license": licence,
+    }
