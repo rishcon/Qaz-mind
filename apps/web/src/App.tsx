@@ -48,6 +48,7 @@ import { FocusPractice } from './components/focus/FocusPractice';
 
 /** Screens that are not connected to the server yet. They say so and show no data. */
 const INVITE_TOKEN_KEY = 'qazmind_invite_token';
+const RETURN_TO_KEY = 'qazmind_return_to';
 
 type UnavailableScreen = 'schools' | 'teacher' | 'exam' | 'not_found';
 
@@ -342,6 +343,18 @@ export default function App() {
   useEffect(() => {
     if (auth.status === 'loading' || !auth.user) return;
     if (currentRoute === 'landing' || currentRoute === 'login' || currentRoute === 'register') {
+      // A person who came from the school application form goes back to it after signing in.
+      let back = '';
+      try {
+        back = sessionStorage.getItem(RETURN_TO_KEY) || '';
+        if (back) sessionStorage.removeItem(RETURN_TO_KEY);
+      } catch {
+        back = '';
+      }
+      if (back === '/schools/apply') {
+        navigateTo('schools_apply', back);
+        return;
+      }
       navigateTo(onboardingCompleted ? 'app' : 'onboarding', onboardingCompleted ? '/app' : '/onboarding');
     }
   }, [currentRoute, auth.status, auth.user, onboardingCompleted]);
@@ -349,7 +362,15 @@ export default function App() {
   // Opens a session returned by the server. The URL is changed first: the app remounts for the new user
   // and reads its screen from the URL.
   const openSession = async (me: MeResponse) => {
-    window.history.pushState({}, '', me.onboarding_completed ? '/app' : '/onboarding');
+    // A person who came from the school application form goes back to it after signing in.
+    let back = '';
+    try {
+      back = sessionStorage.getItem(RETURN_TO_KEY) || '';
+      if (back) sessionStorage.removeItem(RETURN_TO_KEY);
+    } catch {
+      back = '';
+    }
+    window.history.pushState({}, '', back === '/schools/apply' ? back : me.onboarding_completed ? '/app' : '/onboarding');
     await auth.applySession(me);
   };
 
@@ -457,7 +478,18 @@ export default function App() {
     return (
       <SchoolApplyPage
         signedIn={!!auth.user}
-        onLogin={() => navigateTo('login', '/login')}
+        onLogin={() => {
+          try {
+            sessionStorage.setItem(RETURN_TO_KEY, '/schools/apply');
+          } catch {}
+          navigateTo('login', '/login');
+        }}
+        onRegister={() => {
+          try {
+            sessionStorage.setItem(RETURN_TO_KEY, '/schools/apply');
+          } catch {}
+          navigateTo('register', '/register');
+        }}
         onOpenCabinet={() => navigateTo('school', '/school')}
         onBack={() => navigateTo(auth.user ? 'app' : 'landing', auth.user ? '/app' : '/home')}
       />

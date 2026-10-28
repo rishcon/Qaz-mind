@@ -6,6 +6,7 @@ import { errorText } from '../../api/client';
 interface SchoolApplyPageProps {
   signedIn: boolean;
   onLogin: () => void;
+  onRegister: () => void;
   onOpenCabinet: () => void;
   onBack: () => void;
 }
@@ -29,7 +30,7 @@ const field =
   'w-full px-3 py-2.5 bg-white border border-[#E2DED5] rounded-sm text-sm focus:outline-none focus:border-[#171717]';
 
 /** School application form. The application is stored on the server and reviewed by platform staff. */
-export const SchoolApplyPage: React.FC<SchoolApplyPageProps> = ({ signedIn, onLogin, onOpenCabinet, onBack }) => {
+export const SchoolApplyPage: React.FC<SchoolApplyPageProps> = ({ signedIn, onLogin, onRegister, onOpenCabinet, onBack }) => {
   const [applications, setApplications] = useState<ApiSchoolApplication[] | null>(null);
   const [form, setForm] = useState({
     school_name: '',
@@ -105,6 +106,13 @@ export const SchoolApplyPage: React.FC<SchoolApplyPageProps> = ({ signedIn, onLo
               >
                 <span>Войти</span>
                 <ArrowRight className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={onRegister}
+                className="w-full py-2.5 text-xs font-mono font-bold text-[#74736F] hover:text-[#171717] cursor-pointer underline underline-offset-4"
+              >
+                Создать аккаунт
               </button>
             </div>
           ) : (

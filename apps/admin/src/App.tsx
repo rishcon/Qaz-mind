@@ -31,7 +31,6 @@ import { ForbiddenBlock, SectionNotConnected } from './admin/components/ui/PageS
 
 /** Sections whose server side does not exist yet. They are labelled; nothing on them is loaded or saved. */
 const NOT_CONNECTED: Array<{ prefix: string; what: string }> = [
-  { prefix: '/admin/schools', what: 'на сервере ещё нет школ и заявок школ' },
   { prefix: '/admin/teachers', what: 'на сервере ещё нет учителей и классов' },
   { prefix: '/admin/exams', what: 'конструктор пробных экзаменов появится вместе с банком опубликованных вопросов' },
   { prefix: '/admin/assignments', what: 'школьные задания появятся вместе со школами' },
