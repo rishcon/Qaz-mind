@@ -1,28 +1,53 @@
 import React, { useState } from 'react';
-import { Upload, AlertTriangle, ArrowRight, ArrowLeft, Download, Check } from 'lucide-react';
+import { Upload, AlertTriangle, ArrowRight, ArrowLeft, Download, Check, X } from 'lucide-react';
 import { adminApi, errorText, ImportReport, QuestionBody } from '../../api/client';
 import { useAdminData } from '../../api/useAdminData';
 import { ActionResultNotice, type ActionResult } from '../ui/ConnectionNotice';
-import { parseQuestionCsv, QUESTION_CSV_HEADER, type ImportedQuestionRow, type QuestionCsvResult } from '../../utils/questionCsv';
+import { parseQuestionCsv, QUESTION_CSV_HEADER, type ImportedQuestionRow } from '../../utils/questionCsv';
 import { parseQuestionJson, QUESTION_JSON_EXAMPLE, shuffleOptions } from '../../utils/questionJson';
 
-/** The server takes at most this many questions per request. */
+/** The server takes at most this many questions per request; all selected files are sent together. */
 const MAX_ROWS = 500;
+const PASTED = 'вставленный текст';
 
 interface ImportWizardProps {
   onDone: () => void;
   onCancel: () => void;
 }
 
+interface SourceFile {
+  name: string;
+  text: string;
+}
+
+type Tagged = ImportedQuestionRow & { file: string };
+
+interface FileCheck {
+  name: string;
+  rows: number;
+  issues: { line: number; message: string }[];
+  missingColumns: string[];
+  blockedReason: string | null;
+}
+
+interface Combined {
+  rows: Tagged[];
+  files: FileCheck[];
+  issueCount: number;
+  duplicateIds: number;
+  blockedReason: string | null;
+}
+
 /**
- * Bulk import of questions from a CSV in the template layout. Each row is checked here. A row that fails a check
- * is listed with its line number and is never imported with a guessed value.
+ * Bulk import of questions from one or several files (JSON, JSONL or CSV in the template layout). Each file is checked here
+ * and then all of them together on the server, so the same ID in two files is found too. A row that fails a check is listed
+ * with its file and line number and is never imported with a guessed value. The selected files are accepted whole or not at all.
  */
 export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) => {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
-  const [fileName, setFileName] = useState('');
-  const [csvText, setCsvText] = useState('');
-  const [parsed, setParsed] = useState<QuestionCsvResult | null>(null);
+  const [files, setFiles] = useState<SourceFile[]>([]);
+  const [pasted, setPasted] = useState('');
+  const [parsed, setParsed] = useState<Combined | null>(null);
   const [result, setResult] = useState<ActionResult | null>(null);
 
   // Subject codes and IDs from the server catalog. While the list is not loaded, the import is blocked.
@@ -35,7 +60,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
   // Answer positions in the bank should not follow the order the author wrote them in.
   const [shuffle, setShuffle] = useState(true);
   // The rows that were sent to the check. The server counts rows in this order, not in file order.
-  const [sent, setSent] = useState<ImportedQuestionRow[]>([]);
+  const [sent, setSent] = useState<Tagged[]>([]);
 
   const toBody = (source: ImportedQuestionRow): QuestionBody => {
     const row = shuffle ? shuffleOptions(source) : source;
@@ -56,29 +81,92 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
     };
   };
 
-  /** The file position of a row the server reported, from its position among the rows that were sent. */
-  const lineOf = (serverRow: number): number => sent[serverRow - 1]?.line ?? serverRow;
+  /** The file and line of a row the server reported, from its position among the rows that were sent. */
+  const placeOf = (serverRow: number): string => {
+    const row = sent[serverRow - 1];
+    if (!row) return `№ ${serverRow}`;
+    return files.length + (pasted.trim() ? 1 : 0) > 1 ? `${row.file} · строка ${row.line}` : `№ ${row.line}`;
+  };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setFileName(file.name);
-    setCsvText(await file.text());
+    const chosen = Array.from(event.target.files ?? []);
+    event.target.value = ''; // the same file can be chosen again after it was removed
+    if (chosen.length === 0) return;
+    const read: SourceFile[] = [];
+    for (const file of chosen) read.push({ name: file.name, text: await file.text() });
+    setFiles((current) => {
+      const names = new Set(current.map((f) => f.name));
+      return [...current, ...read.filter((f) => !names.has(f.name))];
+    });
     setResult(null);
   };
 
-  const handleCheck = async () => {
-    const isJson = /^[\s\uFEFF]*[[{]/.test(csvText);
-    const next = isJson ? parseQuestionJson(csvText, knownSubjectCodes) : parseQuestionCsv(csvText, knownSubjectCodes);
-    if (next.rows.length > MAX_ROWS) {
-      next.blockedReason = `В файле ${next.rows.length} вопросов, за один раз можно не больше ${MAX_ROWS}. Разделите файл на части.`;
-      next.rows = [];
+  const parseAll = (list: SourceFile[]): Combined => {
+    const rows: Tagged[] = [];
+    const checks: FileCheck[] = [];
+    let duplicateIds = 0;
+    let blockedReason: string | null = null;
+    for (const source of list) {
+      const isJson = /^[\s﻿]*[[{]/.test(source.text);
+      const next = isJson ? parseQuestionJson(source.text, knownSubjectCodes) : parseQuestionCsv(source.text, knownSubjectCodes);
+      rows.push(...next.rows.map((r) => ({ ...r, file: source.name })));
+      duplicateIds += next.duplicateIds;
+      blockedReason = blockedReason ?? next.blockedReason ?? null;
+      checks.push({
+        name: source.name,
+        rows: next.rows.length,
+        issues: next.issues,
+        missingColumns: next.missingColumns,
+        blockedReason: next.blockedReason ?? null,
+      });
     }
+    // The same ID in two different files is as wrong as twice in one file.
+    const seen = new Map<string, string>();
+    for (const row of rows) {
+      if (!row.externalId) continue;
+      const first = seen.get(row.externalId);
+      if (first && first !== row.file) {
+        const check = checks.find((c) => c.name === row.file);
+        check?.issues.push({ line: row.line, message: `ID «${row.externalId}» уже есть в файле ${first}` });
+      } else if (!first) seen.set(row.externalId, row.file);
+    }
+    if (rows.length > MAX_ROWS) {
+      blockedReason = `Во всех файлах вместе ${rows.length} вопросов, за один раз можно не больше ${MAX_ROWS}. Уберите часть файлов и импортируйте их отдельно.`;
+    }
+    return { rows: blockedReason ? [] : rows, files: checks, issueCount: checks.reduce((n, c) => n + c.issues.length, 0), duplicateIds, blockedReason };
+  };
+
+  const handleCheck = () => {
+    setStep(2);
+    void handleCheckWith(files, pasted);
+  };
+
+  const removeFile = (name: string) => setFiles((current) => current.filter((f) => f.name !== name));
+
+  /** Drops a file that has errors and checks the rest again. */
+  const dropAndRecheck = (name: string) => {
+    if (name === PASTED) {
+      setPasted('');
+      void handleCheckWith(files, '');
+      return;
+    }
+    const rest = files.filter((f) => f.name !== name);
+    setFiles(rest);
+    void handleCheckWith(rest, pasted);
+  };
+
+  const handleCheckWith = async (list: SourceFile[], pastedText: string) => {
+    const all = pastedText.trim() ? [...list, { name: PASTED, text: pastedText }] : list;
+    if (all.length === 0) {
+      setParsed(null);
+      setStep(1);
+      return;
+    }
+    const next = parseAll(all);
     setParsed(next);
     setReport(null);
     setResult(null);
     setSent(next.rows);
-    setStep(2);
     if (next.rows.length === 0) return;
     setChecking(true);
     try {
@@ -119,9 +207,11 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
     }
   };
 
-  // Import opens only when neither the page nor the server found an error: a file is accepted whole or not at all.
+  // Import opens only when neither the page nor the server found an error: the chosen files are accepted whole or not at all.
   const canImport =
-    !!parsed && parsed.issues.length === 0 && parsed.rows.length > 0 && !!report && report.errors.length === 0 && !checking;
+    !!parsed && parsed.issueCount === 0 && parsed.rows.length > 0 && !!report && report.errors.length === 0 && !checking;
+  const hasInput = files.length > 0 || pasted.trim().length > 0;
+  const fileCount = files.length + (pasted.trim() ? 1 : 0);
 
   return (
     <div className="space-y-6">
@@ -139,7 +229,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
               Массовый импорт вопросов ЕНТ (JSON / CSV)
             </h1>
             <p className="text-xs text-[#78716C] mt-0.5">
-              Загрузка файла, проверка каждой строки на странице и на сервере, отправка в банк как черновики. Пустые поля не заполняются автоматически.
+              Один или несколько файлов, проверка каждой строки на странице и на сервере, отправка в банк как черновики. Пустые поля не заполняются автоматически.
             </p>
           </div>
         </div>
@@ -193,39 +283,63 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
               <Upload className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-sm font-bold text-[#171717]">Выберите файл JSON, JSONL или CSV</p>
-              <p className="text-xs text-[#78716C] mt-1">Кодировка UTF-8. Формат определяется по содержимому</p>
+              <p className="text-sm font-bold text-[#171717]">Выберите один или несколько файлов JSON, JSONL или CSV</p>
+              <p className="text-xs text-[#78716C] mt-1">
+                Кодировка UTF-8. Формат каждого файла определяется по содержимому. Файлы можно добавлять по частям
+              </p>
             </div>
             <input
               type="file"
+              multiple
               accept=".json,.jsonl,.csv,application/json,text/csv"
               onChange={handleFileChange}
               className="block mx-auto text-xs text-[#5C574F]"
             />
-            {fileName && <p className="text-xs font-mono text-[#5C574F]">{fileName}</p>}
           </label>
+
+          {files.length > 0 && (
+            <ul className="divide-y divide-[#E2DED5] border border-[#E2DED5] rounded-lg text-xs">
+              {files.map((f) => (
+                <li key={f.name} className="p-2.5 flex items-center justify-between gap-3">
+                  <span className="font-mono text-[#171717] truncate">{f.name}</span>
+                  <span className="flex items-center gap-3 shrink-0 text-[#78716C]">
+                    {Math.max(1, Math.round(f.text.length / 1024))} КБ
+                    <button
+                      type="button"
+                      onClick={() => removeFile(f.name)}
+                      aria-label={`Убрать ${f.name}`}
+                      className="p-1 rounded hover:bg-[#F5F3EE] text-[#78716C] cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
 
           <div>
             <label className="text-xs font-medium text-[#78716C] block mb-1">
-              Содержимое файла (можно вставить вручную):
+              Или вставьте содержимое вручную (считается ещё одним файлом):
             </label>
             <textarea
-              rows={6}
-              value={csvText}
-              onChange={(e) => setCsvText(e.target.value)}
+              rows={5}
+              value={pasted}
+              onChange={(e) => setPasted(e.target.value)}
               placeholder={'{"format": "qazmind.questions.v1", "questions": [ … ]}'}
               className="w-full text-xs font-mono p-2.5 bg-[#FAF9F6] border border-[#E2DED5] rounded-md text-[#171717]"
             />
           </div>
 
-          <div className="pt-3 flex justify-end">
+          <div className="pt-3 flex items-center justify-between">
+            <span className="text-xs text-[#78716C]">{hasInput ? `Выбрано файлов: ${fileCount}` : ''}</span>
             <button
               type="button"
-              onClick={() => void handleCheck()}
-              disabled={!csvText.trim()}
+              onClick={handleCheck}
+              disabled={!hasInput}
               className="px-4 py-2 text-xs font-semibold text-white bg-[#FF5A36] hover:bg-[#E84D2B] rounded-md flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Проверить файл <ArrowRight className="w-4 h-4" />
+              {fileCount > 1 ? 'Проверить файлы' : 'Проверить файл'} <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -235,20 +349,13 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
       {step === 2 && parsed && (
         <div className="bg-white rounded-xl border border-[#E2DED5] p-6 max-w-2xl mx-auto space-y-5">
           <h2 className="text-sm font-bold text-[#171717] uppercase tracking-wider">
-            Результаты проверки файла
+            Результаты проверки {parsed.files.length > 1 ? 'файлов' : 'файла'}
           </h2>
 
           {parsed.blockedReason && (
             <div className="p-3.5 rounded-lg bg-[#FEF7EA] border border-[#D89B35]/30 text-xs text-[#9A6715] flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 shrink-0 mt-px" />
               <span>{parsed.blockedReason}</span>
-            </div>
-          )}
-
-          {parsed.missingColumns.length > 0 && (
-            <div className="p-3.5 rounded-lg bg-[#FFF1F2] border border-[#FCA5A5] text-xs text-[#9F2F28] space-y-1">
-              <p className="font-semibold">В файле нет обязательных колонок:</p>
-              <p className="font-mono">{parsed.missingColumns.join(', ')}</p>
             </div>
           )}
 
@@ -259,24 +366,56 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
             </div>
             <div className="p-3 rounded-lg bg-[#FAF9F6] border border-[#E2DED5]">
               <div className="text-xs text-[#78716C]">Строк с ошибками</div>
-              <div className="text-xl font-bold text-[#171717] mt-1">{parsed.issues.length}</div>
+              <div className="text-xl font-bold text-[#171717] mt-1">{parsed.issueCount}</div>
             </div>
             <div className="p-3 rounded-lg bg-[#FAF9F6] border border-[#E2DED5]">
-              <div className="text-xs text-[#78716C]">Повторов ID в файле</div>
+              <div className="text-xs text-[#78716C]">Повторов ID в файлах</div>
               <div className="text-xl font-bold text-[#171717] mt-1">{parsed.duplicateIds}</div>
             </div>
           </div>
 
-          {parsed.issues.length > 0 && (
-            <div className="max-h-[240px] overflow-y-auto divide-y divide-[#E2DED5] border border-[#E2DED5] rounded-lg text-xs">
-              {parsed.issues.map((issue) => (
-                <div key={issue.line} className="p-2.5">
-                  <span className="font-mono font-bold text-[#171717]">Строка {issue.line}:</span>{' '}
-                  <span className="text-[#5C574F]">{issue.message}</span>
+          {/* Each file with its own result */}
+          <div className="space-y-3">
+            {parsed.files.map((file) => {
+              const bad = file.issues.length > 0 || file.missingColumns.length > 0 || !!file.blockedReason;
+              return (
+                <div key={file.name} className={`rounded-lg border text-xs ${bad ? 'border-[#FCA5A5]' : 'border-[#E2DED5]'}`}>
+                  <div className="p-2.5 flex items-center justify-between gap-3 bg-[#FAF9F6] rounded-t-lg">
+                    <span className="font-mono font-bold text-[#171717] truncate">{file.name}</span>
+                    <span className="flex items-center gap-3 shrink-0">
+                      <span className={bad ? 'text-[#9F2F28] font-semibold' : 'text-[#258568] font-semibold'}>
+                        {bad ? `ошибок: ${file.issues.length + file.missingColumns.length}` : `без ошибок · ${file.rows} вопр.`}
+                      </span>
+                      {bad && parsed.files.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => dropAndRecheck(file.name)}
+                          className="underline underline-offset-2 text-[#78716C] hover:text-[#171717] cursor-pointer"
+                        >
+                          Убрать файл
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                  {file.missingColumns.length > 0 && (
+                    <div className="p-2.5 text-[#9F2F28]">
+                      Нет обязательных колонок: <span className="font-mono">{file.missingColumns.join(', ')}</span>
+                    </div>
+                  )}
+                  {file.issues.length > 0 && (
+                    <div className="max-h-[200px] overflow-y-auto divide-y divide-[#E2DED5]">
+                      {file.issues.map((issue, i) => (
+                        <div key={`${issue.line}-${i}`} className="p-2.5">
+                          <span className="font-mono font-bold text-[#171717]">Строка {issue.line}:</span>{' '}
+                          <span className="text-[#5C574F]">{issue.message}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          )}
+              );
+            })}
+          </div>
 
           <div className="space-y-2 border-t border-[#E2DED5] pt-4">
             <h3 className="text-xs font-bold text-[#171717] uppercase tracking-wider">Проверка на сервере</h3>
@@ -292,7 +431,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
                   <div className="max-h-[200px] overflow-y-auto divide-y divide-[#E2DED5] border border-[#FCA5A5] rounded-lg text-xs">
                     {report.errors.map((e, i) => (
                       <div key={`e${i}`} className="p-2.5">
-                        <span className="font-mono font-bold text-[#9F2F28]">№ {lineOf(e.row)}:</span>{' '}
+                        <span className="font-mono font-bold text-[#9F2F28]">{placeOf(e.row)}:</span>{' '}
                         <span className="text-[#5C574F]">{e.message}</span>
                       </div>
                     ))}
@@ -302,7 +441,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
                   <div className="max-h-[160px] overflow-y-auto divide-y divide-[#E2DED5] border border-[#D89B35]/40 rounded-lg text-xs">
                     {report.warnings.map((w, i) => (
                       <div key={`w${i}`} className="p-2.5">
-                        <span className="font-mono font-bold text-[#9A6715]">№ {lineOf(w.row)}:</span>{' '}
+                        <span className="font-mono font-bold text-[#9A6715]">{placeOf(w.row)}:</span>{' '}
                         <span className="text-[#5C574F]">{w.message}</span>
                       </div>
                     ))}
@@ -316,7 +455,8 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
             </label>
             {!canImport && !checking && (
               <p className="text-[11px] text-[#78716C]">
-                Импорт откроется, когда в файле не останется ошибок: файл принимается целиком или не принимается.
+                Импорт откроется, когда ни в одном файле не останется ошибок: выбранные файлы принимаются целиком или не принимаются. Файл с ошибками можно
+                убрать и импортировать остальные.
               </p>
             )}
           </div>
@@ -343,15 +483,17 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
       {step === 3 && parsed && (
         <div className="bg-white rounded-xl border border-[#E2DED5] p-6 max-w-3xl mx-auto space-y-5">
           <h2 className="text-sm font-bold text-[#171717] uppercase tracking-wider">
-            Предпросмотр строк, которые пойдут в банк (всего {parsed.rows.length})
+            Предпросмотр строк, которые пойдут в банк (всего {parsed.rows.length}
+            {parsed.files.length > 1 ? `, файлов: ${parsed.files.length}` : ''})
           </h2>
 
           <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
             {parsed.rows.map((row) => (
-              <div key={row.line} className="p-3.5 rounded-lg border border-[#E2DED5] bg-[#FAF9F6] text-xs space-y-2">
+              <div key={`${row.file}:${row.line}`} className="p-3.5 rounded-lg border border-[#E2DED5] bg-[#FAF9F6] text-xs space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-[11px] font-bold text-[#FF5A36]">
                     {row.externalId ?? `строка ${row.line}`}
+                    {parsed.files.length > 1 && <span className="ml-2 font-normal text-[#78716C]">{row.file}</span>}
                   </span>
                   <span className="text-[10px] uppercase bg-white border border-[#E2DED5] px-2 py-0.5 rounded text-[#78716C]">
                     {row.subjectCode} • {row.difficulty}
@@ -406,7 +548,8 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
           </div>
           <h2 className="text-base font-bold text-[#171717]">Импорт выполнен</h2>
           <p className="text-xs text-[#78716C] leading-relaxed">
-            В банк добавлено {parsed?.rows.length ?? 0} вопросов в статусе «Черновик».
+            В банк добавлено {parsed?.rows.length ?? 0} вопросов в статусе «Черновик»
+            {parsed && parsed.files.length > 1 ? ` из файлов: ${parsed.files.length}` : ''}.
           </p>
           <div className="pt-2">
             <button
