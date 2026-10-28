@@ -15,6 +15,13 @@ export const QUESTION_CSV_HEADER = [
   'OptionD',
   'CorrectOption',
   'ExplanationRu',
+  'QuestionTextKz',
+  'OptionAKz',
+  'OptionBKz',
+  'OptionCKz',
+  'OptionDKz',
+  'ExplanationKz',
+  'Source',
 ] as const;
 
 const REQUIRED_COLUMNS = [
@@ -29,7 +36,8 @@ const REQUIRED_COLUMNS = [
 ] as const;
 
 const DIFFICULTIES = ['easy', 'medium', 'hard'] as const;
-const LABELS = ['A', 'B', 'C', 'D'] as const;
+const LABELS = ['A', 'B', 'C', 'D', 'E'] as const;
+const CSV_LABELS = ['A', 'B', 'C', 'D'] as const;
 
 export type Difficulty = (typeof DIFFICULTIES)[number];
 export type OptionLabel = (typeof LABELS)[number];
@@ -41,9 +49,16 @@ export interface ImportedQuestionRow {
   subjectCode: string;
   difficulty: Difficulty;
   textRu: string;
-  options: Array<{ label: OptionLabel; textRu: string }>;
+  textKz: string;
+  options: Array<{ label: OptionLabel; textRu: string; textKz: string }>;
   correctLabel: OptionLabel;
   explanationRu: string;
+  explanationKz: string;
+  /** Where the question comes from. The server refuses an import row without it. */
+  source: string;
+  points: number;
+  /** The file asks to keep the options in the written order, so they are not shuffled on import. */
+  keepOrder: boolean;
 }
 
 export interface QuestionCsvIssue {
@@ -137,7 +152,11 @@ export function parseQuestionCsv(text: string, knownSubjectCodes: readonly strin
     const type = cell(record, 'Type');
     const difficulty = cell(record, 'Difficulty').toLowerCase();
     const textRu = cell(record, 'QuestionTextRu');
-    const options = LABELS.map((label) => ({ label, textRu: cell(record, `Option${label}`) }));
+    const options = CSV_LABELS.map((label) => ({
+      label,
+      textRu: cell(record, `Option${label}`),
+      textKz: cell(record, `Option${label}Kz`),
+    }));
     const correct = cell(record, 'CorrectOption').toUpperCase();
     const externalId = cell(record, 'ID') || null;
     const explanationRu = cell(record, 'ExplanationRu');
@@ -153,7 +172,7 @@ export function parseQuestionCsv(text: string, knownSubjectCodes: readonly strin
     for (const option of options) {
       if (!option.textRu) problems.push(`не заполнен вариант ${option.label}`);
     }
-    if (!(LABELS as readonly string[]).includes(correct)) problems.push('правильный ответ: A, B, C или D');
+    if (!(CSV_LABELS as readonly string[]).includes(correct)) problems.push('правильный ответ: A, B, C или D');
     if (externalId) {
       if (seenIds.has(externalId)) {
         duplicateIds += 1;
@@ -176,6 +195,11 @@ export function parseQuestionCsv(text: string, knownSubjectCodes: readonly strin
       options,
       correctLabel: correct as OptionLabel,
       explanationRu,
+      textKz: cell(record, 'QuestionTextKz'),
+      explanationKz: cell(record, 'ExplanationKz'),
+      source: cell(record, 'Source'),
+      points: 1,
+      keepOrder: false,
     });
   });
 
