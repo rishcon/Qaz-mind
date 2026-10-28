@@ -359,7 +359,8 @@ export default function App() {
     // A signed-in person has no use for the public pages, and a school account has no student dashboard.
     const publicRoute = currentRoute === 'landing' || currentRoute === 'login' || currentRoute === 'register' || currentRoute === 'schools_apply';
     const studentRoute = sessionRoutes.includes(currentRoute);
-    if (publicRoute || (auth.user.account_type === 'school' && studentRoute)) navigateTo(home.route, home.url);
+    const passwordDone = currentRoute === 'change_password' && !auth.user.must_change_password;
+    if (publicRoute || passwordDone || (auth.user.account_type === 'school' && studentRoute)) navigateTo(home.route, home.url);
   }, [currentRoute, auth.status, auth.user, onboardingCompleted]);
 
   // Opens a session returned by the server. The URL is changed first: the app remounts for the new user

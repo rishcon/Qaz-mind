@@ -173,6 +173,15 @@
 
 Платформа (`/api/v1/admin`): `GET /organizations/{id}` (люди, классы, лицензии, заявка, число заданий; `schools.read`), `POST /organizations/{id}/status` (`active/suspended/archived`, причина обязательна для не-`active`, аудит `organization.status`; `schools.approve`), `GET /teachers` и `GET /assignments` по всем школам (`schools.read`; без ответов учеников). Одобрение и отклонение заявки отправляют письмо заявителю; ответ содержит `email_sent`, а сбой почты не отменяет решение. В `/admin/overview` заявки школ попадают в `attention` (`school_applications`).
 
+### Регистрация школы и аккаунты, созданные школой (этап 8+)
+
+- `POST /auth/register-school` (публичный): `{name, email, password, school_name, type, city, contact_position, contact_phone, approx_students}`. Создаёт аккаунт представителя (`account_type = school`) и заявку `pending` одним действием, отправляет письмо для подтверждения почты. Ответ одинаков для новых и существующих адресов. Кабинет школы открывается после одобрения заявки платформой.
+- `POST /auth/login` принимает в поле `email` адрес почты **или логин** аккаунта, созданного школой. `GET /auth/me` возвращает `account_type` (`student` — самостоятельный, `school` — представитель школы или учитель, `managed` — ученик, созданный школой), `username`, `must_change_password`.
+- `POST /auth/password/change` `{current_password, new_password}`: сбрасывает `must_change_password`, завершает остальные сессии.
+- `POST /organizations/{org}/accounts` (админ школы): `{role: TEACHER|SCHOOL_ADMIN|STUDENT, name, class_ids, username?, password?}` создаёт аккаунт с логином и временным паролем; ответ с паролем показывается один раз (хранится только хеш). Ученику нужен класс и место лицензии (409 `NO_LICENSE`/`NO_SEATS`). `POST …/accounts/bulk` `{class_id, names ≤ 200}` создаёт всех или никого (не больше 60 за раз). `POST …/accounts/{user}/reset-password` выдаёт новый временный пароль аккаунтам своей школы (чужой — 404) и завершает его сессии.
+- У аккаунта, созданного школой, нет почтового ящика (`<логин>@managed.invalid`): восстановление пароля по письму для него не работает, пароль сбрасывает администратор школы. Миграция 0009.
+- Приглашения по email и коды классов остались в API, но в интерфейсе школы не используются.
+
 ## 2. Запланировано: административный API
 
 Пути согласованы с `packages/contracts/src/admin.ts` (`ADMIN_ENDPOINTS`). **На сервере их пока нет.** Админка к ним не обращается: данных не показывает, записи отказывают (см. `INTEGRATION.md`). Модель доступа — в `ADMIN_ACCESS.md`. Ниже — предлагаемые параметры; окончательные поля уточняются при создании Pydantic-схем.
