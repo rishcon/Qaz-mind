@@ -28,6 +28,7 @@ export const ClassesTab: React.FC<ClassesTabProps> = ({ orgId, classes, isAdmin,
   const [name, setName] = useState('');
   const [grade, setGrade] = useState('');
   const [year, setYear] = useState(currentAcademicYear());
+  const [language, setLanguage] = useState<'ru' | 'kz'>('ru');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [showArchived, setShowArchived] = useState(false);
@@ -49,7 +50,7 @@ export const ClassesTab: React.FC<ClassesTabProps> = ({ orgId, classes, isAdmin,
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
-    const ok = await run(() => schoolApi.createClass(orgId, { name, academic_year: year, grade: grade ? Number(grade) : null }));
+    const ok = await run(() => schoolApi.createClass(orgId, { name, academic_year: year, grade: grade ? Number(grade) : null, language }));
     if (ok) {
       setName('');
       setGrade('');
@@ -81,6 +82,13 @@ export const ClassesTab: React.FC<ClassesTabProps> = ({ orgId, classes, isAdmin,
             <span className="block">Учебный год</span>
             <input className={`${field} w-32`} value={year} onChange={(e) => setYear(e.target.value)} required />
           </label>
+          <label className="text-xs font-bold space-y-1">
+            <span className="block">Язык класса</span>
+            <select className={field} value={language} onChange={(e) => setLanguage(e.target.value as 'ru' | 'kz')}>
+              <option value="ru">Русский</option>
+              <option value="kz">Қазақша</option>
+            </select>
+          </label>
           <button type="submit" disabled={busy} className={button}>
             Создать класс
           </button>
@@ -100,13 +108,23 @@ export const ClassesTab: React.FC<ClassesTabProps> = ({ orgId, classes, isAdmin,
                     {c.status === 'archived' && <span className="ml-2 text-xs font-mono text-[#74736F]">в архиве</span>}
                   </div>
                   <div className="text-xs text-[#74736F]">
-                    {c.academic_year} · учеников: {c.student_count} · учителей: {c.teacher_count}
+                    {c.academic_year} · язык: {c.language === 'kz' ? 'казахский' : 'русский'} · учеников: {c.student_count} · учителей: {c.teacher_count}
                   </div>
                 </div>
                 <div className="flex gap-4">
                   <button type="button" onClick={() => setOpen(open === c.id ? '' : c.id)} className="text-xs font-mono font-bold underline underline-offset-4 cursor-pointer">
                     {open === c.id ? 'Свернуть' : 'Управлять'}
                   </button>
+                  {writable && isAdmin && c.status === 'active' && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => run(() => schoolApi.updateClass(orgId, c.id, { language: c.language === 'kz' ? 'ru' : 'kz' }))}
+                      className="text-xs font-mono font-bold underline underline-offset-4 text-[#74736F] hover:text-[#171717] cursor-pointer"
+                    >
+                      {c.language === 'kz' ? 'Сделать русским' : 'Сделать казахским'}
+                    </button>
+                  )}
                   {writable && isAdmin && (
                     <button
                       type="button"

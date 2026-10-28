@@ -148,6 +148,7 @@ class SchoolService:
                 name=c.name,
                 academic_year=c.academic_year,
                 grade=c.grade,
+                language=c.language,
                 status=c.status,
                 student_count=counts.get((c.id, "student"), 0),
                 teacher_count=counts.get((c.id, "teacher"), 0),
@@ -194,6 +195,7 @@ class SchoolService:
             name_key=body.name.casefold(),
             academic_year=body.academic_year,
             grade=body.grade,
+            language=body.language,
         )
         self.db.add(school_class)
         try:
@@ -209,6 +211,8 @@ class SchoolService:
             school_class.name_key = body.name.casefold()
         if body.status:
             school_class.status = body.status
+        if body.language:
+            school_class.language = body.language
         try:
             await self.db.commit()
         except IntegrityError:

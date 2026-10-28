@@ -88,6 +88,22 @@ class AssignmentService:
             )
             or 0
         )
+        kz_missing = None
+        if assignment.status != "draft" and await self.db.scalar(
+            select(SchoolClass.id)
+            .join(AssignmentClass, AssignmentClass.class_id == SchoolClass.id)
+            .where(AssignmentClass.assignment_id == assignment.id, SchoolClass.language == "kz")
+            .limit(1)
+        ):
+            kz_missing = (
+                await self.db.scalar(
+                    select(func.count())
+                    .select_from(AssignmentQuestion)
+                    .join(Question, Question.id == AssignmentQuestion.question_id)
+                    .where(AssignmentQuestion.assignment_id == assignment.id, Question.text_kz == "")
+                )
+                or 0
+            )
         return AssignmentOut(
             id=assignment.id,
             title=assignment.title,
@@ -105,6 +121,7 @@ class AssignmentService:
             published_at=assignment.published_at,
             closed_at=assignment.closed_at,
             submitted_count=submitted,
+            kz_missing=kz_missing,
         )
 
     async def _load(self, org_id: uuid.UUID, assignment_id: uuid.UUID, member: OrganizationMember) -> Assignment:
@@ -411,6 +428,7 @@ class AssignmentService:
                     subject_id=assignment.subject_id,
                     organization_name=organization.name,
                     class_name=school_class.name,
+                    language=school_class.language,
                     question_count=assignment.question_count,
                     due_at=assignment.due_at,
                     max_attempts=assignment.max_attempts,
@@ -487,6 +505,23 @@ class AssignmentService:
         assignment = await self.db.get(Assignment, attempt.assignment_id)
         return attempt, assignment  # type: ignore[return-value]
 
+    async def _language(self, user_id: uuid.UUID, assignment_id: uuid.UUID) -> str:
+        """The language of the class through which the student got the assignment (the first one, if several)."""
+        language = await self.db.scalar(
+            select(SchoolClass.language)
+            .join(ClassMember, ClassMember.class_id == SchoolClass.id)
+            .join(AssignmentClass, AssignmentClass.class_id == SchoolClass.id)
+            .where(
+                AssignmentClass.assignment_id == assignment_id,
+                ClassMember.user_id == user_id,
+                ClassMember.role == "student",
+                ClassMember.status == "active",
+            )
+            .order_by(SchoolClass.name)
+            .limit(1)
+        )
+        return language or "ru"
+
     async def _attempt_out(self, attempt: AssignmentAttempt, assignment: Assignment) -> AttemptOut:
         rows = (
             await self.db.execute(
@@ -520,6 +555,7 @@ class AssignmentService:
             assignment_id=assignment.id,
             title=assignment.title,
             number=attempt.number,
+            language=await self._language(attempt.student_id, assignment.id),
             started_at=attempt.started_at,
             submitted_at=attempt.submitted_at,
             due_at=assignment.due_at,

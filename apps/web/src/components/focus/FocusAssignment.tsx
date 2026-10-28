@@ -7,8 +7,6 @@ import { errorText } from '../../api/client';
 interface FocusAssignmentProps {
   attemptId: string;
   currentLang: Language;
-  /** Language of the question text: the student's exam language. */
-  contentLang: Language;
   onExit: () => void;
 }
 
@@ -17,8 +15,8 @@ interface FocusAssignmentProps {
  * the attempt is submitted; the key is never shown while answering. After submitting, the score and the key
  * appear only if the teacher's setting allows it.
  */
-export const FocusAssignment: React.FC<FocusAssignmentProps> = ({ attemptId, currentLang, contentLang, onExit }) => {
-  const isKz = currentLang === 'kz';
+export const FocusAssignment: React.FC<FocusAssignmentProps> = ({ attemptId, currentLang, onExit }) => {
+  const [attemptLang, setAttemptLang] = useState<Language | null>(null);
   const [attempt, setAttempt] = useState<ApiAttempt | null>(null);
   const [loadError, setLoadError] = useState('');
   const [index, setIndex] = useState(0);
@@ -34,6 +32,7 @@ export const FocusAssignment: React.FC<FocusAssignmentProps> = ({ attemptId, cur
       .then((a) => {
         if (cancelled) return;
         setAttempt(a);
+        setAttemptLang(a.language);
         const saved: Record<string, OptionLabel> = {};
         a.items.forEach((item) => {
           if (item.selected_label) saved[item.question.id] = item.selected_label as OptionLabel;
@@ -46,7 +45,10 @@ export const FocusAssignment: React.FC<FocusAssignmentProps> = ({ attemptId, cur
     };
   }, [attemptId]);
 
-  const text = (ru: string, kz: string) => (contentLang === 'kz' && kz ? kz : ru);
+  // The class decides the language of school assignments, both for the questions and for the screen around them.
+  const language: Language = attemptLang ?? currentLang;
+  const isKz = language === 'kz';
+  const text = (ru: string, kz: string) => (language === 'kz' && kz ? kz : ru);
   const shell = (children: React.ReactNode) => (
     <div className="min-h-screen bg-[#F5F3EE] text-[#171717] flex flex-col selection:bg-[#FF5A36] selection:text-white">
       <header className="sticky top-0 z-30 bg-[#F5F3EE]/95 backdrop-blur-md border-b border-[#E2DED5] px-4 md:px-8 py-3.5 flex items-center justify-between">

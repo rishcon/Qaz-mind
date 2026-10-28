@@ -46,6 +46,9 @@ class AssignmentOut(BaseModel):
     published_at: datetime | None
     closed_at: datetime | None
     submitted_count: int = 0
+    # For a published assignment that goes to a Kazakh-language class: how many questions have no Kazakh text yet
+    # (they are shown in Russian). None when no class of the assignment is Kazakh.
+    kz_missing: int | None = None
 
 
 class ResultRow(BaseModel):
@@ -86,6 +89,7 @@ class MyAssignmentOut(BaseModel):
     subject_id: str
     organization_name: str
     class_name: str
+    language: str = "ru"
     question_count: int
     due_at: datetime | None
     max_attempts: int
@@ -119,6 +123,8 @@ class AttemptOut(BaseModel):
     assignment_id: uuid.UUID
     title: str
     number: int
+    # The language of the student's class: the questions are shown in it.
+    language: str = "ru"
     started_at: datetime
     submitted_at: datetime | None
     due_at: datetime | None

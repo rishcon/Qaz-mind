@@ -309,6 +309,8 @@ export interface ApiSchoolClass {
   name: string;
   academic_year: string;
   grade: number | null;
+  /** The language in which the students of the class take school assignments. */
+  language: 'ru' | 'kz';
   status: 'active' | 'archived';
   student_count: number;
   teacher_count: number;
@@ -328,9 +330,9 @@ export const schoolApi = {
   myApplications: () => apiRequest<ApiSchoolApplication[]>('GET', '/school-applications/mine'),
   myOrganizations: () => apiRequest<ApiMembership[]>('GET', '/me/organizations'),
   classes: (orgId: string) => apiRequest<ApiSchoolClass[]>('GET', `/organizations/${encodeURIComponent(orgId)}/classes`),
-  createClass: (orgId: string, body: { name: string; academic_year: string; grade?: number | null }) =>
+  createClass: (orgId: string, body: { name: string; academic_year: string; grade?: number | null; language?: 'ru' | 'kz' }) =>
     apiRequest<ApiSchoolClass>('POST', `/organizations/${encodeURIComponent(orgId)}/classes`, body),
-  updateClass: (orgId: string, classId: string, body: { name?: string; status?: 'active' | 'archived' }) =>
+  updateClass: (orgId: string, classId: string, body: { name?: string; status?: 'active' | 'archived'; language?: 'ru' | 'kz' }) =>
     apiRequest<ApiSchoolClass>('PATCH', `/organizations/${encodeURIComponent(orgId)}/classes/${encodeURIComponent(classId)}`, body),
   teachers: (orgId: string) => apiRequest<ApiTeacher[]>('GET', `/organizations/${encodeURIComponent(orgId)}/teachers`),
   setTeacherClasses: (orgId: string, teacherId: string, classIds: string[]) =>
@@ -422,6 +424,8 @@ export interface ApiAssignment extends ApiAssignmentInput {
   published_at: string | null;
   closed_at: string | null;
   submitted_count: number;
+  /** Questions without Kazakh text in an assignment for a Kazakh class (shown in Russian); null if no class is Kazakh. */
+  kz_missing: number | null;
 }
 
 export interface ApiResultRow {
@@ -454,6 +458,7 @@ export interface ApiMyAssignment {
   subject_id: string;
   organization_name: string;
   class_name: string;
+  language: 'ru' | 'kz';
   question_count: number;
   due_at: string | null;
   max_attempts: number;
@@ -480,6 +485,8 @@ export interface ApiAttempt {
   assignment_id: string;
   title: string;
   number: number;
+  /** The language of the student's class: the questions are shown in it. */
+  language: 'ru' | 'kz';
   started_at: string;
   submitted_at: string | null;
   due_at: string | null;

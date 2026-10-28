@@ -646,7 +646,6 @@ export default function App() {
       <FocusAssignment
         attemptId={activeAttemptId}
         currentLang={currentLang}
-        contentLang={profile.examLanguage}
         onExit={() => {
           navigateTo('app', '/app');
           setDashboardView('assignments');

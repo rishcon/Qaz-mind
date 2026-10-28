@@ -87,6 +87,7 @@ class SchoolClass(Base):
         UniqueConstraint("organization_id", "academic_year", "name_key", name="uq_school_classes_org_year_name"),
         CheckConstraint("status IN ('active', 'archived')", name="status_valid"),
         CheckConstraint("grade IS NULL OR grade BETWEEN 1 AND 12", name="grade_range"),
+        CheckConstraint("language IN ('ru', 'kz')", name="language_valid"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -96,6 +97,8 @@ class SchoolClass(Base):
     name_key: Mapped[str] = mapped_column(String(80))
     academic_year: Mapped[str] = mapped_column(String(9))
     grade: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    # The language of the class: its students answer school assignments in this language (Russian or Kazakh).
+    language: Mapped[str] = mapped_column(String(2), default="ru", server_default="ru")
     status: Mapped[str] = mapped_column(String(10), default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 

@@ -193,6 +193,13 @@ export const AssignmentsTab: React.FC<AssignmentsTabProps> = ({ orgId, classes, 
               </p>
             </div>
           )}
+          {picked.some((id) => classes.find((c) => c.id === id)?.language === 'kz') && (
+            <p className="text-[11px] text-amber-800">
+              Среди классов есть казахский: ученики увидят вопросы по-казахски, если у вопроса есть казахский текст, иначе по-русски.
+              {ownPicked.length > 0 && own.filter((q) => ownPicked.includes(q.id) && !q.text_kz).length > 0 &&
+                ` У ${own.filter((q) => ownPicked.includes(q.id) && !q.text_kz).length} из выбранных своих вопросов перевода нет.`}
+            </p>
+          )}
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 items-center">
             <span className="text-xs font-bold">Классы:</span>
             {activeClasses.length === 0 && <span className="text-xs text-[#74736F]">нет доступных классов</span>}
@@ -203,7 +210,7 @@ export const AssignmentsTab: React.FC<AssignmentsTabProps> = ({ orgId, classes, 
                   checked={picked.includes(c.id)}
                   onChange={() => setPicked((cur) => (cur.includes(c.id) ? cur.filter((x) => x !== c.id) : [...cur, c.id]))}
                 />
-                {c.name}
+                {c.name}{c.language === 'kz' ? ' (қаз)' : ''}
               </label>
             ))}
           </div>
@@ -229,6 +236,11 @@ export const AssignmentsTab: React.FC<AssignmentsTabProps> = ({ orgId, classes, 
                 </div>
               </div>
               <div className="flex gap-4">
+                {a.kz_missing !== null && a.kz_missing > 0 && (
+                  <div className="basis-full text-[11px] text-amber-800">
+                    Для казахского класса у {a.kz_missing} вопр. нет казахского текста: ученики увидят их по-русски.
+                  </div>
+                )}
                 {a.status !== 'draft' && (
                   <button type="button" className={link} onClick={() => showResults(a.id)}>
                     Результаты

@@ -112,6 +112,7 @@ async def organization_detail(
                 "id": str(c.id),
                 "name": c.name,
                 "academic_year": c.academic_year,
+                "language": c.language,
                 "status": c.status,
                 "student_count": counts.get((c.id, "student"), 0),
                 "teacher_count": counts.get((c.id, "teacher"), 0),

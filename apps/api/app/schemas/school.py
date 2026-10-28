@@ -64,6 +64,8 @@ class ClassIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     academic_year: str
     grade: int | None = Field(default=None, ge=1, le=12)
+    # Russian or Kazakh: the language in which the students of the class take school assignments.
+    language: Literal["ru", "kz"] = "ru"
 
     @field_validator("name")
     @classmethod
@@ -85,6 +87,7 @@ class ClassIn(BaseModel):
 class ClassPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=80)
     status: Literal["active", "archived"] | None = None
+    language: Literal["ru", "kz"] | None = None
 
     @field_validator("name")
     @classmethod
@@ -97,6 +100,7 @@ class ClassOut(BaseModel):
     name: str
     academic_year: str
     grade: int | None
+    language: str
     status: str
     student_count: int
     teacher_count: int

@@ -70,7 +70,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({ currentLang, o
               <div className="space-y-1">
                 <div className="font-bold">{a.title}</div>
                 <div className="text-xs text-[#74736F]">
-                  {a.organization_name} · {a.class_name} · {a.question_count} вопр. · срок: {fmt(a.due_at)} · попыток: {a.attempts.filter((x) => x.submitted).length} из{' '}
+                  {a.organization_name} · {a.class_name}{a.language === 'kz' ? ' (қазақша)' : ''} · {a.question_count} вопр. · срок: {fmt(a.due_at)} · попыток: {a.attempts.filter((x) => x.submitted).length} из{' '}
                   {a.max_attempts}
                 </div>
                 <div className="text-xs">
