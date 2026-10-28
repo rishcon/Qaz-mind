@@ -100,6 +100,32 @@
 
 Все эти маршруты требуют сессии. Контент публикуется CLI, а не API: см. `apps/api/app/content/cli.py`.
 
+### Школы (этап 6)
+
+Все маршруты требуют сессии ученика; id пользователя берётся из сессии. Чужая или несуществующая организация даёт 404 (существование чужих школ не раскрывается), недостаточная роль внутри своей организации даёт 403. Приостановленная организация не изменяется (403 `ORGANIZATION_NOT_ACTIVE`).
+
+| Метод | Путь | Назначение |
+|---|---|---|
+| POST | `/api/v1/school-applications` | заявка школы (`pending`); вторая открытая заявка даёт 409 `APPLICATION_PENDING`. Организацию заявка не создаёт |
+| GET | `/api/v1/school-applications/mine` | свои заявки и их статус |
+| GET | `/api/v1/me/organizations` | организации, где у пользователя активное членство, и роль (`SCHOOL_ADMIN`/`TEACHER`) |
+| GET | `/api/v1/organizations/{org}` | организация и роль вызывающего |
+| GET/POST | `/api/v1/organizations/{org}/classes` | список (администратор школы — все, учитель — только назначенные) / создание (только администратор школы; дубль названия в учебном году даёт 409 `CLASS_EXISTS`) |
+| GET/PATCH | `/api/v1/organizations/{org}/classes/{id}` | карточка; PATCH `{name?, status?}` — только администратор школы |
+| GET | `/api/v1/organizations/{org}/teachers` | учителя организации и их классы (администратор школы) |
+| POST | `/api/v1/organizations/{org}/teachers/{user}/classes` | `{class_ids}` — полная замена классов учителя; классы только этой организации |
+
+Платформа (`/api/v1/admin`, сессия сотрудника с MFA):
+
+| Метод | Путь | Право |
+|---|---|---|
+| GET | `/admin/school-applications?status=` | `schools.read` |
+| POST | `/admin/school-applications/{id}/approve` | `schools.approve`; в одной транзакции создаёт организацию и делает заявителя `SCHOOL_ADMIN` |
+| POST | `/admin/school-applications/{id}/reject` | `schools.approve`; `{reason}` ≥ 5 символов |
+| GET | `/admin/organizations` | `schools.read`; число классов, учителей, учеников |
+
+Решения аудируются (`school_application.approve/reject`). Письма заявителю о решении пока не отправляются.
+
 ## 2. Запланировано: административный API
 
 Пути согласованы с `packages/contracts/src/admin.ts` (`ADMIN_ENDPOINTS`). **На сервере их пока нет.** Админка к ним не обращается: данных не показывает, записи отказывают (см. `INTEGRATION.md`). Модель доступа — в `ADMIN_ACCESS.md`. Ниже — предлагаемые параметры; окончательные поля уточняются при создании Pydantic-схем.

@@ -7,20 +7,26 @@ from app.models.learning import LessonProgress
 from app.models.practice import PracticeAnswer, PracticeSession
 from app.models.profile import ProfilePair, StudentProfile
 from app.models.question import Question
+from app.models.school import ClassMember, Organization, OrganizationApplication, OrganizationMember, SchoolClass
 from app.models.user import User
 
 __all__ = [
     "AuditEvent",
     "AuthSession",
     "AuthToken",
+    "ClassMember",
     "CurriculumTopic",
     "Lesson",
     "LessonProgress",
     "LessonVersion",
+    "Organization",
+    "OrganizationApplication",
+    "OrganizationMember",
     "PracticeAnswer",
     "PracticeSession",
     "ProfilePair",
     "Question",
+    "SchoolClass",
     "StaffInvitation",
     "StaffMember",
     "StaffRole",
