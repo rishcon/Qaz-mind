@@ -27,7 +27,6 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ currentLang, onStart, 
   return (
     <section className="relative min-h-screen flex flex-col justify-between pt-32 md:pt-40 overflow-hidden border-b border-[#D9D5CB] bg-white">
       <Boxes />
-      <div className="absolute inset-0 z-10 bg-white [mask-image:radial-gradient(transparent_45%,white_95%)] pointer-events-none" />
       <div className="relative z-20 max-w-7xl w-full mx-auto px-6 md:px-10 pointer-events-none">
         <div className="qm-fade flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-xs font-semibold tracking-wider">
           <span className="text-[#FF5A36]">{t.label}</span>
