@@ -4,6 +4,7 @@ import { StudentProfile } from '../../types/dashboard';
 import { OFFICIAL_PROFILE_PAIRS } from '../../types/auth';
 import { Check, Save, User, Shield, Bell, BookOpen } from 'lucide-react';
 import { errorText } from '../../api/client';
+import { MySchoolCard } from '../school/MySchoolCard';
 
 interface SettingsViewProps {
   currentLang: Language;
@@ -171,6 +172,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </button>
         </div>
       </form>
+
+      <MySchoolCard />
     </div>
   );
 };

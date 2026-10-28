@@ -35,6 +35,10 @@ export const SchoolsPage: React.FC<SchoolsPageProps> = () => {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+  const [licenseFor, setLicenseFor] = useState<OrganizationRow | null>(null);
+  const [plan, setPlan] = useState('pilot');
+  const [seats, setSeats] = useState('');
+  const [months, setMonths] = useState('12');
   const [result, setResult] = useState<ActionResult | null>(null);
 
   const allowed = can('schools.read');
@@ -171,9 +175,60 @@ export const SchoolsPage: React.FC<SchoolsPageProps> = () => {
     { key: 'class_count', header: 'Классов', cell: (o) => <span className="text-xs font-semibold">{o.class_count}</span> },
     { key: 'teacher_count', header: 'Учителей', cell: (o) => <span className="text-xs font-semibold">{o.teacher_count}</span> },
     { key: 'student_count', header: 'Учеников', cell: (o) => <span className="text-xs font-semibold">{o.student_count}</span> },
+    {
+      key: 'license',
+      header: 'Лицензия',
+      cell: (o) =>
+        o.license ? (
+          <div className="text-xs">
+            <div className="font-semibold">
+              {o.license.seats_used} / {o.license.seat_limit} мест
+            </div>
+            <div className="text-[11px] text-[#78716C]">
+              {o.license.plan} · до {fmtDate(o.license.expires_at)}
+            </div>
+          </div>
+        ) : (
+          <span className="text-xs text-[#A8A29E]">нет</span>
+        ),
+    },
     { key: 'created_at', header: 'Подключена', cell: (o) => <span className="text-xs text-[#5C574F]">{fmtDate(o.created_at)}</span> },
     { key: 'status', header: 'Статус', cell: (o) => <StatusBadge status={o.status} /> },
+    {
+      key: 'actions',
+      header: '',
+      className: 'text-right',
+      cell: (o) =>
+        can('finance.manage') ? (
+          <button
+            onClick={() => setLicenseFor(o)}
+            className="px-2.5 py-1 text-xs text-[#171717] bg-white border border-[#E2DED5] rounded hover:bg-[#F5F3EE] cursor-pointer"
+          >
+            Выдать лицензию
+          </button>
+        ) : null,
+    },
   ];
+
+  const seatsNumber = Number(seats);
+  const monthsNumber = Number(months);
+  const licenseValid = Number.isInteger(seatsNumber) && seatsNumber >= 1 && Number.isInteger(monthsNumber) && monthsNumber >= 1 && monthsNumber <= 60 && plan.trim().length >= 2;
+  const issueLicense = async () => {
+    if (!licenseFor || !licenseValid) return;
+    const start = new Date();
+    const end = new Date(start);
+    end.setMonth(end.getMonth() + monthsNumber);
+    setBusy(true);
+    const ok = await runAction(
+      () => adminApi.createLicense(licenseFor.id, { plan: plan.trim(), seat_limit: seatsNumber, starts_at: start.toISOString(), expires_at: end.toISOString() }),
+      `Лицензия записана для «${licenseFor.name}». Оплата не списывается: платежи не подключены.`,
+      setResult,
+    );
+    setBusy(false);
+    setLicenseFor(null);
+    setSeats('');
+    if (ok) organizations.reload();
+  };
 
   const statusFilters: TableFilter[] = [
     {
@@ -244,6 +299,23 @@ export const SchoolsPage: React.FC<SchoolsPageProps> = () => {
           emptyMessage={organizations.loading ? 'Загрузка…' : 'Организаций пока нет'}
         />
       )}
+
+      <ConfirmationDialog
+        isOpen={!!licenseFor}
+        title={`Лицензия: ${licenseFor?.name ?? ''}`}
+        message="Места нужны ученикам при вступлении в класс. Срок отсчитывается с сегодняшнего дня. Это учёт мест, а не платёж."
+        variant="primary"
+        confirmLabel={busy ? 'Записываем…' : 'Записать лицензию'}
+        confirmDisabled={busy || !licenseValid}
+        onConfirm={issueLicense}
+        onCancel={() => setLicenseFor(null)}
+      >
+        <div className="grid grid-cols-3 gap-2">
+          <input value={plan} onChange={(e) => setPlan(e.target.value)} placeholder="План" className="text-xs p-2 bg-white border border-[#E2DED5] rounded-md" />
+          <input value={seats} onChange={(e) => setSeats(e.target.value)} placeholder="Мест" inputMode="numeric" className="text-xs p-2 bg-white border border-[#E2DED5] rounded-md" />
+          <input value={months} onChange={(e) => setMonths(e.target.value)} placeholder="Месяцев" inputMode="numeric" className="text-xs p-2 bg-white border border-[#E2DED5] rounded-md" />
+        </div>
+      </ConfirmationDialog>
 
       <ConfirmationDialog
         isOpen={approveOpen}

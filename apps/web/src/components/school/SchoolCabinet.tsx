@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { ApiMembership, ApiSchoolClass, ApiTeacher, schoolApi } from '../../api/endpoints';
+import { ApiInvitation, ApiLicense, ApiMembership, ApiSchoolClass, ApiTeacher, schoolApi } from '../../api/endpoints';
 import { errorText } from '../../api/client';
+import { ClassPanel } from './ClassPanel';
 
 interface SchoolCabinetProps {
   onExit: () => void;
@@ -30,6 +31,10 @@ export const SchoolCabinet: React.FC<SchoolCabinetProps> = ({ onExit, onApply })
   const [tab, setTab] = useState<'classes' | 'teachers'>('classes');
   const [classes, setClasses] = useState<ApiSchoolClass[]>([]);
   const [teachers, setTeachers] = useState<ApiTeacher[]>([]);
+  const [invitations, setInvitations] = useState<ApiInvitation[]>([]);
+  const [licenses, setLicenses] = useState<ApiLicense[]>([]);
+  const [openClass, setOpenClass] = useState('');
+  const [teacherEmail, setTeacherEmail] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [newName, setNewName] = useState('');
@@ -59,6 +64,8 @@ export const SchoolCabinet: React.FC<SchoolCabinetProps> = ({ onExit, onApply })
     try {
       setClasses(await schoolApi.classes(orgId));
       setTeachers(isAdmin ? await schoolApi.teachers(orgId) : []);
+      setInvitations(isAdmin ? await schoolApi.invitations(orgId) : []);
+      setLicenses(isAdmin ? await schoolApi.licenses(orgId) : []);
     } catch (err) {
       setError(errorText(err));
     }
@@ -206,7 +213,8 @@ export const SchoolCabinet: React.FC<SchoolCabinetProps> = ({ onExit, onApply })
                   ) : (
                     <div className="bg-white border border-[#E2DED5] rounded-sm divide-y divide-[#EFECE4]">
                       {classes.map((c) => (
-                        <div key={c.id} className="p-4 flex flex-wrap items-center justify-between gap-3">
+                        <div key={c.id}>
+                        <div className="p-4 flex flex-wrap items-center justify-between gap-3">
                           <div>
                             <div className="font-bold">
                               {c.name}
@@ -216,29 +224,79 @@ export const SchoolCabinet: React.FC<SchoolCabinetProps> = ({ onExit, onApply })
                               {c.academic_year} · учеников: {c.student_count} · учителей: {c.teacher_count}
                             </div>
                           </div>
-                          {writable && (
+                          <div className="flex gap-4">
                             <button
                               type="button"
-                              disabled={busy}
-                              onClick={() => run(() => schoolApi.updateClass(orgId, c.id, { status: c.status === 'active' ? 'archived' : 'active' }))}
-                              className="text-xs font-mono font-bold underline underline-offset-4 text-[#74736F] hover:text-[#171717] cursor-pointer"
+                              onClick={() => setOpenClass(openClass === c.id ? '' : c.id)}
+                              className="text-xs font-mono font-bold underline underline-offset-4 cursor-pointer"
                             >
-                              {c.status === 'active' ? 'В архив' : 'Вернуть'}
+                              {openClass === c.id ? 'Свернуть' : 'Управлять'}
                             </button>
-                          )}
+                            {writable && isAdmin && (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => run(() => schoolApi.updateClass(orgId, c.id, { status: c.status === 'active' ? 'archived' : 'active' }))}
+                                className="text-xs font-mono font-bold underline underline-offset-4 text-[#74736F] hover:text-[#171717] cursor-pointer"
+                              >
+                                {c.status === 'active' ? 'В архив' : 'Вернуть'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        {openClass === c.id && (
+                          <ClassPanel orgId={orgId} classId={c.id} writable={!!membership?.organization && membership.organization.status === 'active'} onChanged={() => void load()} />
+                        )}
                         </div>
                       ))}
                     </div>
                   )}
-                  <p className="text-xs text-[#74736F]">
-                    Ученики попадут в классы по приглашениям и кодам класса — этот раздел появится на следующем этапе.
-                  </p>
+                  {isAdmin && (
+                    <p className="text-xs text-[#74736F]">
+                      {licenses.find((l) => l.current)
+                        ? `Лицензия «${licenses.find((l) => l.current)!.plan}»: занято мест ${licenses.find((l) => l.current)!.seats_used} из ${licenses.find((l) => l.current)!.seat_limit}, действует до ${new Date(licenses.find((l) => l.current)!.expires_at).toLocaleDateString('ru-RU')}.`
+                        : 'Действующей лицензии нет: ученики не смогут вступать в классы, пока платформа не выдаст места.'}
+                    </p>
+                  )}
                 </section>
               ) : (
                 <section className="space-y-4">
+                  <form
+                    className="bg-white border border-[#E2DED5] p-4 rounded-sm flex flex-wrap gap-3 items-end"
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      const ok = await run(() => schoolApi.invite(orgId, { email: teacherEmail, role: 'TEACHER' }));
+                      if (ok) setTeacherEmail('');
+                    }}
+                  >
+                    <label className="text-xs font-bold space-y-1 flex-1 min-w-[200px]">
+                      <span className="block">Пригласить учителя по email</span>
+                      <input className={`${field} w-full`} type="email" value={teacherEmail} onChange={(e) => setTeacherEmail(e.target.value)} placeholder="teacher@school.kz" required />
+                    </label>
+                    <button type="submit" disabled={busy || !writable} className={button}>
+                      Отправить приглашение
+                    </button>
+                  </form>
+                  {invitations.filter((i) => i.status === 'pending').length > 0 && (
+                    <ul className="text-xs text-[#74736F] space-y-1.5">
+                      {invitations.filter((i) => i.status === 'pending').map((i) => (
+                        <li key={i.id} className="flex flex-wrap items-center gap-3">
+                          <span>
+                            {i.email} · {i.role === 'TEACHER' ? 'учитель' : 'ученик'} · до {new Date(i.expires_at).toLocaleDateString('ru-RU')}
+                          </span>
+                          <button type="button" disabled={busy} className="font-mono font-bold underline underline-offset-4 cursor-pointer" onClick={() => run(() => schoolApi.resendInvitation(orgId, i.id))}>
+                            Отправить снова
+                          </button>
+                          <button type="button" disabled={busy} className="font-mono font-bold underline underline-offset-4 text-red-700 cursor-pointer" onClick={() => run(() => schoolApi.revokeInvitation(orgId, i.id))}>
+                            Отозвать
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                   {teachers.length === 0 ? (
                     <p className="text-sm text-[#74736F]">
-                      В организации пока нет учителей. Приглашения учителей появятся на следующем этапе.
+                      В организации пока нет учителей. Пригласите учителя по email: после принятия приглашения назначьте ему классы.
                     </p>
                   ) : (
                     <div className="bg-white border border-[#E2DED5] rounded-sm divide-y divide-[#EFECE4]">

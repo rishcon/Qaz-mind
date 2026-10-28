@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.admin.service import StaffContext, write_audit
 from app.api.deps import get_db
 from app.api.v1.admin.deps import MetaDep, require
-from app.models import ClassMember, Organization, OrganizationMember, SchoolClass
+from app.core.time import utcnow
+from app.models import ClassMember, LicenseSeat, Organization, OrganizationLicense, OrganizationMember, SchoolClass
 from app.schemas.school import ApplicationOut, RejectIn
 from app.services.school import SchoolService
 
@@ -104,6 +105,23 @@ async def list_organizations(
         ).all()
     )
     organizations = (await db.execute(select(Organization).order_by(Organization.name))).scalars().all()
+    now = utcnow()
+    used = dict(
+        (
+            await db.execute(
+                select(LicenseSeat.license_id, func.count()).where(LicenseSeat.revoked_at.is_(None)).group_by(LicenseSeat.license_id)
+            )
+        ).all()
+    )
+    current: dict = {}
+    for lic in (
+        await db.execute(
+            select(OrganizationLicense)
+            .where(OrganizationLicense.status == "active", OrganizationLicense.starts_at <= now, OrganizationLicense.expires_at > now)
+            .order_by(OrganizationLicense.expires_at)
+        )
+    ).scalars():
+        current[lic.organization_id] = lic  # the one that ends last wins
     return {
         "items": [
             {
@@ -116,6 +134,14 @@ async def list_organizations(
                 "class_count": classes.get(o.id, 0),
                 "teacher_count": teachers.get(o.id, 0),
                 "student_count": students.get(o.id, 0),
+                "license": None
+                if o.id not in current
+                else {
+                    "plan": current[o.id].plan,
+                    "seat_limit": current[o.id].seat_limit,
+                    "seats_used": used.get(current[o.id].id, 0),
+                    "expires_at": current[o.id].expires_at.isoformat(),
+                },
             }
             for o in organizations
         ]

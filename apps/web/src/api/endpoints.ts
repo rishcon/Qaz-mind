@@ -318,4 +318,106 @@ export const schoolApi = {
       `/organizations/${encodeURIComponent(orgId)}/teachers/${encodeURIComponent(teacherId)}/classes`,
       { class_ids: classIds },
     ),
+
+  // invitations, codes, requests, licences
+  invitations: (orgId: string) => apiRequest<ApiInvitation[]>('GET', `/organizations/${encodeURIComponent(orgId)}/invitations`),
+  invite: (orgId: string, body: { email: string; role: 'TEACHER' | 'STUDENT'; class_id?: string | null }) =>
+    apiRequest<ApiInvitation>('POST', `/organizations/${encodeURIComponent(orgId)}/invitations`, body),
+  resendInvitation: (orgId: string, id: string) =>
+    apiRequest<ApiInvitation>('POST', `/organizations/${encodeURIComponent(orgId)}/invitations/${encodeURIComponent(id)}/resend`, {}),
+  revokeInvitation: (orgId: string, id: string) =>
+    apiRequest<ApiInvitation>('POST', `/organizations/${encodeURIComponent(orgId)}/invitations/${encodeURIComponent(id)}/revoke`, {}),
+  acceptInvitation: (token: string) => apiRequest<{ organization_id: string; role: string; class_id: string | null }>('POST', '/invitations/accept', { token }),
+  joinCodes: (orgId: string, classId: string) =>
+    apiRequest<ApiJoinCode[]>('GET', `/organizations/${encodeURIComponent(orgId)}/classes/${encodeURIComponent(classId)}/join-codes`),
+  createJoinCode: (orgId: string, classId: string, body: { valid_days: number; max_uses: number }) =>
+    apiRequest<ApiJoinCode>('POST', `/organizations/${encodeURIComponent(orgId)}/classes/${encodeURIComponent(classId)}/join-codes`, body),
+  revokeJoinCode: (orgId: string, classId: string, codeId: string) =>
+    apiRequest<ApiJoinCode>(
+      'POST',
+      `/organizations/${encodeURIComponent(orgId)}/classes/${encodeURIComponent(classId)}/join-codes/${encodeURIComponent(codeId)}/revoke`,
+      {},
+    ),
+  classRequests: (orgId: string, classId: string) =>
+    apiRequest<ApiClassJoinRequest[]>('GET', `/organizations/${encodeURIComponent(orgId)}/classes/${encodeURIComponent(classId)}/join-requests`),
+  decideRequest: (requestId: string, action: 'approve' | 'reject') =>
+    apiRequest<{ status: string }>('POST', `/classes/join-requests/${encodeURIComponent(requestId)}/${action}`, {}),
+  students: (orgId: string, classId: string) =>
+    apiRequest<ApiClassStudent[]>('GET', `/organizations/${encodeURIComponent(orgId)}/classes/${encodeURIComponent(classId)}/students`),
+  removeStudent: (orgId: string, classId: string, userId: string) =>
+    apiRequest<void>(
+      'POST',
+      `/organizations/${encodeURIComponent(orgId)}/classes/${encodeURIComponent(classId)}/students/${encodeURIComponent(userId)}/remove`,
+      {},
+    ),
+  licenses: (orgId: string) => apiRequest<ApiLicense[]>('GET', `/organizations/${encodeURIComponent(orgId)}/licenses`),
+  // the student's side
+  requestJoin: (code: string) => apiRequest<ApiMyJoinRequest>('POST', '/classes/join-requests', { code }),
+  myJoinRequests: () => apiRequest<ApiMyJoinRequest[]>('GET', '/me/join-requests'),
+  mySchoolClasses: () => apiRequest<ApiMyClass[]>('GET', '/me/school-classes'),
 };
+
+export interface ApiInvitation {
+  id: string;
+  email: string;
+  role: 'TEACHER' | 'STUDENT';
+  class_id: string | null;
+  status: 'pending' | 'accepted' | 'revoked';
+  expires_at: string;
+  created_at: string;
+}
+
+export interface ApiJoinCode {
+  id: string;
+  code_hint: string;
+  expires_at: string;
+  max_uses: number;
+  uses_count: number;
+  revoked: boolean;
+  /** Present only in the answer to the creating call. */
+  code: string | null;
+}
+
+export interface ApiClassJoinRequest {
+  id: string;
+  status: 'pending' | 'approved' | 'rejected';
+  user_id: string;
+  name: string;
+  email: string;
+  created_at: string;
+}
+
+export interface ApiClassStudent {
+  user_id: string;
+  name: string;
+  email: string;
+  joined_at: string;
+}
+
+export interface ApiLicense {
+  id: string;
+  plan: string;
+  seat_limit: number;
+  seats_used: number;
+  starts_at: string;
+  expires_at: string;
+  status: string;
+  current: boolean;
+}
+
+export interface ApiMyJoinRequest {
+  id: string;
+  status: 'pending' | 'approved' | 'rejected';
+  class_id: string;
+  class_name: string;
+  organization_name: string;
+  created_at: string;
+}
+
+export interface ApiMyClass {
+  class_id: string;
+  class_name: string;
+  academic_year: string;
+  organization_id: string;
+  organization_name: string;
+}

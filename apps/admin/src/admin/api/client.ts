@@ -290,6 +290,7 @@ export interface OrganizationRow {
   class_count: number;
   teacher_count: number;
   student_count: number;
+  license: { plan: string; seat_limit: number; seats_used: number; expires_at: string } | null;
 }
 
 export const adminApi = {
@@ -362,6 +363,8 @@ export const adminApi = {
     post<{ status: string; organization_id: string }>(`/admin/school-applications/${id}/approve`),
   rejectSchoolApplication: (id: string, reason: string) =>
     post<{ status: string }>(`/admin/school-applications/${id}/reject`, { reason }),
+  createLicense: (orgId: string, body: { plan: string; seat_limit: number; starts_at: string; expires_at: string }) =>
+    post<unknown>(`/admin/organizations/${orgId}/licenses`, body),
   organizations: () => get<{ items: OrganizationRow[] }>('/admin/organizations'),
   importQuestions: (rows: QuestionBody[]) => post<{ created: number }>('/admin/questions/import', { rows }),
   /** Checks the rows on the server without saving anything. Row numbers count the rows that were sent. */

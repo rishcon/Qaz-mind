@@ -8,6 +8,7 @@ import { emptyStudentProfile, toProfilePatch, toStudentProfile } from './api/map
 import { UnavailablePage } from './components/common/UnavailablePage';
 import { SchoolApplyPage } from './components/school/SchoolApplyPage';
 import { SchoolCabinet } from './components/school/SchoolCabinet';
+import { AcceptInvitePage } from './components/school/AcceptInvitePage';
 import { ResetPasswordPage } from './components/auth/ResetPasswordPage';
 
 // Landing Page Components
@@ -44,6 +45,8 @@ import { FocusMistakeReview } from './components/focus/FocusMistakeReview';
 import { FocusPractice } from './components/focus/FocusPractice';
 
 /** Screens that are not connected to the server yet. They say so and show no data. */
+const INVITE_TOKEN_KEY = 'qazmind_invite_token';
+
 type UnavailableScreen = 'schools' | 'teacher' | 'exam' | 'not_found';
 
 const UNAVAILABLE_COPY: Record<
@@ -90,6 +93,7 @@ type AppRoute =
   | 'landing'
   | 'schools'
   | 'schools_apply'
+  | 'invite'
   | 'school'
   | 'teacher'
   | 'not_found'
@@ -131,6 +135,7 @@ export default function App() {
 
     if (path === '/schools') return 'schools';
     if (path === '/schools/apply') return 'schools_apply';
+    if (path === '/invite') return 'invite';
     if (path.startsWith('/school')) return 'school';
     if (path.startsWith('/teacher')) return 'teacher';
     if (path.startsWith('/admin')) return 'not_found';
@@ -302,6 +307,19 @@ export default function App() {
     }
   }, [currentRoute, auth.status, auth.user, onboardingCompleted]);
 
+  // An invitation link opened before signing in: after the login the person is brought back to it (once).
+  useEffect(() => {
+    if (auth.status === 'loading' || !auth.user || currentRoute === 'invite') return;
+    let stored = '';
+    try {
+      stored = sessionStorage.getItem(INVITE_TOKEN_KEY) || '';
+      if (stored) sessionStorage.removeItem(INVITE_TOKEN_KEY);
+    } catch {
+      stored = '';
+    }
+    if (stored) navigateTo('invite', `/invite?token=${encodeURIComponent(stored)}`);
+  }, [auth.status, auth.user?.id, currentRoute]);
+
   // A signed-in student has no use for the public pages: the landing and the login/register forms lead to the dashboard.
   useEffect(() => {
     if (auth.status === 'loading' || !auth.user) return;
@@ -396,6 +414,26 @@ export default function App() {
   // ==========================================
   // ROUTE RENDERING
   // ==========================================
+
+  if (currentRoute === 'invite') {
+    const token = new URLSearchParams(window.location.search).get('token') || '';
+    const rememberAndGo = (route: AppRoute) => {
+      try {
+        sessionStorage.setItem(INVITE_TOKEN_KEY, token);
+      } catch {}
+      navigateTo(route, `/${route}`);
+    };
+    return (
+      <AcceptInvitePage
+        token={token}
+        signedIn={!!auth.user}
+        email={auth.user?.email ?? ''}
+        onLogin={() => rememberAndGo('login')}
+        onRegister={() => rememberAndGo('register')}
+        onDone={(role) => (role === 'TEACHER' ? navigateTo('school', '/school') : navigateTo('app', '/app'))}
+      />
+    );
+  }
 
   if (currentRoute === 'schools_apply') {
     return (
