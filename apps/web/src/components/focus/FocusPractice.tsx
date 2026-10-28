@@ -7,6 +7,8 @@ import { errorText } from '../../api/client';
 interface FocusPracticeProps {
   sessionId: string;
   currentLang: Language;
+  /** Language of the question text: the student's exam language, independent of the interface language. */
+  contentLang: Language;
   /** Starts another run for the same subject. */
   onRestart: (subjectId: string) => void;
   onExit: () => void;
@@ -21,7 +23,7 @@ type LoadState =
  * Full-viewport practice run. The server checks every answer and reveals the key only after the answer is saved,
  * so nothing on this screen can show a correct answer early.
  */
-export const FocusPractice: React.FC<FocusPracticeProps> = ({ sessionId, currentLang, onRestart, onExit }) => {
+export const FocusPractice: React.FC<FocusPracticeProps> = ({ sessionId, currentLang, contentLang, onRestart, onExit }) => {
   const isKz = currentLang === 'kz';
   const [load, setLoad] = useState<LoadState>({ status: 'loading' });
   const [index, setIndex] = useState(0);
@@ -48,7 +50,7 @@ export const FocusPractice: React.FC<FocusPracticeProps> = ({ sessionId, current
     };
   }, [sessionId]);
 
-  const text = (ru: string, kz: string) => (isKz && kz ? kz : ru);
+  const text = (ru: string, kz: string) => (contentLang === 'kz' && kz ? kz : ru);
 
   if (load.status === 'loading') {
     return (

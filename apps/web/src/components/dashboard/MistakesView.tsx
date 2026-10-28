@@ -11,6 +11,8 @@ import {
 interface MistakesViewProps {
   mistakes: MistakeItem[];
   currentLang: Language;
+  /** Language of the question text: the student's exam language. */
+  contentLang: Language;
   onReviewMistake: (mistake: MistakeItem) => void;
   onNavigateToPractice: () => void;
 }
@@ -18,6 +20,7 @@ interface MistakesViewProps {
 export const MistakesView: React.FC<MistakesViewProps> = ({
   mistakes,
   currentLang,
+  contentLang,
   onReviewMistake,
   onNavigateToPractice,
 }) => {
@@ -82,7 +85,7 @@ export const MistakesView: React.FC<MistakesViewProps> = ({
                   </span>
                 </div>
                 <h3 className="font-bold text-sm text-[#171717]">
-                  {currentLang === 'kz' ? item.questionTextKz : item.questionTextRu}
+                  {contentLang === 'kz' && item.questionTextKz ? item.questionTextKz : item.questionTextRu}
                 </h3>
               </div>
 

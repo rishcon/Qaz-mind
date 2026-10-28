@@ -8,6 +8,8 @@ import { errorText } from '../../api/client';
 interface FocusMistakeReviewProps {
   mistake: MistakeItem;
   currentLang: Language;
+  /** Language of the question text: the student's exam language. */
+  contentLang: Language;
   /** Called after the server has stored the retry, so the list can be reloaded. */
   onAnswered: () => void;
   onExit: () => void;
@@ -17,14 +19,14 @@ interface FocusMistakeReviewProps {
  * Retry of a question that was answered wrongly. All options are offered again; the server checks the answer and
  * stores it, and the mistake counts as resolved only when the latest answer is correct.
  */
-export const FocusMistakeReview: React.FC<FocusMistakeReviewProps> = ({ mistake, currentLang, onAnswered, onExit }) => {
+export const FocusMistakeReview: React.FC<FocusMistakeReviewProps> = ({ mistake, currentLang, contentLang, onAnswered, onExit }) => {
   const isKz = currentLang === 'kz';
   const [picked, setPicked] = useState<OptionLabel | null>(null);
   const [review, setReview] = useState<ApiPracticeReview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const text = (ru: string, kz: string) => (isKz && kz ? kz : ru);
+  const text = (ru: string, kz: string) => (contentLang === 'kz' && kz ? kz : ru);
   const optionText = (label: string) => {
     const o = mistake.options.find((opt) => opt.label === label);
     return o ? text(o.textRu, o.textKz) : label;

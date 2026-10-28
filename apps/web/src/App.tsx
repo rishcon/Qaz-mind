@@ -497,6 +497,7 @@ export default function App() {
       <FocusPractice
         sessionId={activePracticeSessionId}
         currentLang={currentLang}
+        contentLang={profile.examLanguage}
         onRestart={(subjectId) => {
           practiceApi
             .start(subjectId, 10)
@@ -543,6 +544,7 @@ export default function App() {
       <FocusMistakeReview
         mistake={mistake}
         currentLang={currentLang}
+        contentLang={profile.examLanguage}
         onAnswered={() => void loadMistakes()}
         onExit={() => {
           navigateTo('app', '/app');
@@ -606,6 +608,7 @@ export default function App() {
           <MistakesView
             mistakes={mistakesList}
             currentLang={currentLang}
+            contentLang={profile.examLanguage}
             onReviewMistake={handleReviewMistake}
             onNavigateToPractice={() => setDashboardView('practice')}
           />
