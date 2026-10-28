@@ -9,7 +9,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 
 from app.admin.service import StaffContext, write_audit
 from app.api.deps import get_db
@@ -125,6 +125,18 @@ async def _emails(db, ids: set[uuid.UUID]) -> dict[uuid.UUID, str]:
     return dict(rows)
 
 
+def _filtered(subject_id: str | None, status: str | None, search: str):
+    query = select(Question)
+    if subject_id:
+        query = query.where(Question.subject_id == subject_id)
+    if status:
+        query = query.where(Question.status == status)
+    if search.strip():
+        pattern = f"%{search.strip().lower()}%"
+        query = query.where(or_(func.lower(Question.text_ru).like(pattern), func.lower(Question.external_id).like(pattern)))
+    return query
+
+
 @router.get("")
 async def list_questions(
     ctx: StaffDep,
@@ -135,14 +147,7 @@ async def list_questions(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ) -> dict:
-    query = select(Question)
-    if subject_id:
-        query = query.where(Question.subject_id == subject_id)
-    if status:
-        query = query.where(Question.status == status)
-    if search.strip():
-        pattern = f"%{search.strip().lower()}%"
-        query = query.where(or_(func.lower(Question.text_ru).like(pattern), func.lower(Question.external_id).like(pattern)))
+    query = _filtered(subject_id, status, search)
     total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
     rows = (
         await db.execute(query.order_by(Question.updated_at.desc()).offset((page - 1) * page_size).limit(page_size))
@@ -330,3 +335,54 @@ async def import_questions(
     await write_audit(db, ctx, "question.imported", meta, "question", None, details={"count": len(created)})
     await db.commit()
     return {"created": len(created)}
+
+
+class BulkFilter(BaseModel):
+    subject_id: str | None = None
+    status: str | None = None
+    search: str = ""
+
+
+class BulkIn(BaseModel):
+    """Either an explicit list of questions or the filter the person is looking at ("all questions found")."""
+
+    action: Literal["submit", "delete"]
+    ids: list[uuid.UUID] | None = Field(default=None, max_length=5000)
+    filter: BulkFilter | None = None
+
+
+@router.post("/bulk")
+async def bulk(
+    body: BulkIn,
+    meta: MetaDep,
+    ctx: Annotated[StaffContext, Depends(require("content.edit"))],
+    db=Depends(get_db),
+) -> dict:
+    """Sends drafts to review or deletes drafts. Questions in any other status are skipped and counted, never touched:
+    a question that was reviewed or published is archived, not deleted."""
+    if (body.ids is None) == (body.filter is None):
+        raise AppError(422, "BULK_SCOPE", "Укажите либо список вопросов, либо фильтр")
+    if body.ids is not None:
+        if not body.ids:
+            raise AppError(422, "BULK_SCOPE", "Список вопросов пуст")
+        query = select(Question).where(Question.id.in_(body.ids))
+    else:
+        query = _filtered(body.filter.subject_id, body.filter.status, body.filter.search)
+    selected = (await db.execute(query)).scalars().all()
+    drafts = [q for q in selected if q.status == "draft"]
+    now = utcnow()
+    if body.action == "submit":
+        for q in drafts:
+            q.status = "in_review"
+            q.updated_at = now
+    else:
+        ids = [q.id for q in drafts]
+        for start in range(0, len(ids), 1000):
+            await db.execute(delete(Question).where(Question.id.in_(ids[start : start + 1000]), Question.status == "draft"))
+    done = len(drafts)
+    await write_audit(
+        db, ctx, f"question.bulk_{body.action}", meta, "question", None,
+        details={"done": done, "skipped": len(selected) - done, "ids": [str(q.id) for q in drafts[:200]]},
+    )
+    await db.commit()
+    return {"done": done, "skipped": len(selected) - done}

@@ -321,6 +321,12 @@ export const adminApi = {
   updateQuestion: (id: string, body: QuestionBody) => put<{ id: string; version: number }>(`/admin/questions/${id}`, body),
   questionTransition: (id: string, action: WorkflowAction, notes = '') =>
     post<{ status: string }>(`/admin/questions/${id}/transition`, { action, notes }),
+  /** Sends drafts to review or deletes drafts. Either a list of ids or the filter ("all found"). Other statuses are skipped. */
+  bulkQuestions: (body: {
+    action: 'submit' | 'delete';
+    ids?: string[];
+    filter?: { subject_id?: string; status?: string; search?: string };
+  }) => post<{ done: number; skipped: number }>('/admin/questions/bulk', body),
   importQuestions: (rows: QuestionBody[]) => post<{ created: number }>('/admin/questions/import', { rows }),
   /** Checks the rows on the server without saving anything. Row numbers count the rows that were sent. */
   checkQuestionImport: (rows: QuestionBody[]) =>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Upload, FileQuestion } from 'lucide-react';
+import { Plus, Upload, FileQuestion, Send, Trash2 } from 'lucide-react';
 import { adminApi, Question } from '../api/client';
 import { useAdminData } from '../api/useAdminData';
 import { DIFFICULTY_LABELS, STATUS_LABELS } from '../api/labels';
@@ -36,6 +36,58 @@ export const QuestionsPage: React.FC<QuestionsPageProps> = ({ onNavigate }) => {
     [subjectFilter, statusFilter, debounced],
     30000,
   );
+  const [selected, setSelected] = useState<string[]>([]);
+  const [allFound, setAllFound] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+
+  // A different filter is a different set of questions: the selection does not carry over.
+  useEffect(() => {
+    setSelected([]);
+    setAllFound(false);
+  }, [subjectFilter, statusFilter, debounced]);
+
+  const items = questions.data?.items ?? [];
+  const total = questions.data?.total ?? 0;
+  const count = allFound ? total : selected.length;
+  const canSelectAllFound = !allFound && items.length > 0 && selected.length >= Math.min(25, items.length) && total > selected.length;
+
+  const run = async (action: 'submit' | 'delete') => {
+    if (count === 0 || busy) return;
+    const text =
+      action === 'delete'
+        ? `Удалить безвозвратно черновики из выбранных (${count})? Вопросы на проверке, утверждённые и опубликованные не удаляются.`
+        : `Отправить на рецензию черновики из выбранных (${count})? Остальные статусы будут пропущены.`;
+    if (!window.confirm(text)) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await adminApi.bulkQuestions({
+        action,
+        ...(allFound
+          ? {
+              filter: {
+                subject_id: subjectFilter === 'all' ? undefined : subjectFilter,
+                status: statusFilter === 'all' ? undefined : statusFilter,
+                search: debounced,
+              },
+            }
+          : { ids: selected }),
+      });
+      setNotice({
+        kind: 'ok',
+        text: `${action === 'delete' ? 'Удалено' : 'Отправлено на рецензию'}: ${result.done}.${result.skipped ? ` Пропущено (не черновики): ${result.skipped}.` : ''}`,
+      });
+      setSelected([]);
+      setAllFound(false);
+      questions.reload();
+    } catch (e) {
+      setNotice({ kind: 'error', text: e instanceof Error ? e.message : 'Не удалось выполнить действие' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const subjectName = (id: string) => subjects.data?.items.find((s) => s.id === id)?.title_ru ?? id;
 
   const columns: ColumnDef<Question>[] = [
@@ -94,7 +146,7 @@ export const QuestionsPage: React.FC<QuestionsPageProps> = ({ onNavigate }) => {
               onClick={() => onNavigate('/admin/content/questions/import')}
               className="px-3 py-1.5 text-xs font-medium text-[#171717] bg-white border border-[#E2DED5] rounded-md hover:bg-[#F5F3EE] flex items-center gap-1.5 cursor-pointer"
             >
-              <Upload className="w-3.5 h-3.5 text-[#78716C]" /> Импорт CSV
+              <Upload className="w-3.5 h-3.5 text-[#78716C]" /> Импорт
             </button>
             <button
               onClick={() => onNavigate('/admin/content/questions/new')}
@@ -108,7 +160,64 @@ export const QuestionsPage: React.FC<QuestionsPageProps> = ({ onNavigate }) => {
 
       {questions.error && <ErrorBlock text={questions.error} onRetry={questions.reload} />}
 
+      {notice && (
+        <div
+          role="status"
+          className={`text-xs px-3 py-2 rounded-md border ${notice.kind === 'ok' ? 'bg-[#F0FDF4] border-[#BBF7D0] text-[#166534]' : 'bg-[#FEF2F2] border-[#FECACA] text-[#991B1B]'}`}
+        >
+          {notice.text}
+        </div>
+      )}
+
+      {count > 0 && (
+        <div className="flex flex-wrap items-center gap-3 px-3 py-2 rounded-md border border-[#FFD9CF] bg-[#FFF7F5] text-xs text-[#171717]">
+          <span className="font-semibold">Выбрано: {count}</span>
+          {canSelectAllFound && (
+            <button onClick={() => setAllFound(true)} className="underline text-[#E84D2B] cursor-pointer">
+              Выбрать все {total} по текущим условиям
+            </button>
+          )}
+          {allFound && (
+            <button
+              onClick={() => {
+                setAllFound(false);
+                setSelected([]);
+              }}
+              className="underline text-[#78716C] cursor-pointer"
+            >
+              Снять выбор
+            </button>
+          )}
+          <div className="flex items-center gap-2 ml-auto">
+            {can('content.edit') && (
+              <>
+                <button
+                  disabled={busy}
+                  onClick={() => run('submit')}
+                  className="px-3 py-1.5 font-semibold text-white bg-[#FF5A36] hover:bg-[#E84D2B] rounded-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Send className="w-3.5 h-3.5" /> На рецензию
+                </button>
+                <button
+                  disabled={busy}
+                  onClick={() => run('delete')}
+                  className="px-3 py-1.5 font-semibold text-[#991B1B] bg-white border border-[#FECACA] hover:bg-[#FEF2F2] rounded-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Удалить
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <DataTable
+        selectable={can('content.edit')}
+        selectedIds={allFound ? items.map((q) => q.id) : selected}
+        onSelectionChange={(ids) => {
+          setAllFound(false);
+          setSelected(ids);
+        }}
         data={questions.data?.items ?? []}
         columns={columns}
         keyExtractor={(q) => q.id}
@@ -119,7 +228,7 @@ export const QuestionsPage: React.FC<QuestionsPageProps> = ({ onNavigate }) => {
         pageSize={25}
         onRowClick={(q) => onNavigate(`/admin/content/questions/${q.id}`)}
         emptyMessage={questions.loading ? 'Загрузка…' : 'Вопросов нет'}
-        emptySubtitle="Создайте вопрос или импортируйте файл CSV"
+        emptySubtitle="Создайте вопрос или импортируйте файл"
       />
     </div>
   );

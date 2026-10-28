@@ -279,3 +279,40 @@ async def test_monitoring_reports_the_database(harness):
     data = (await owner.get("/api/v1/admin/monitoring")).json()
     database = next(s for s in data["services"] if s["id"] == "database")
     assert database["status"] == "ok"
+
+
+async def test_bulk_submit_and_delete_touch_only_drafts(harness):
+    author = await staff(harness, "author@qazmind.kz", ["CONTENT_MANAGER"])
+    reviewer = await staff(harness, "reviewer@qazmind.kz", ["CONTENT_REVIEWER"])
+    base = "/api/v1/admin/questions"
+    rows = [imported(f"b-{i}", text_ru=f"Вопрос номер {i} для массовых действий?") for i in range(4)]
+    assert (await api_post(author, base + "/import", {"rows": rows})).status_code == 201
+    items = (await author.get(base)).json()["items"]
+    ids = [q["id"] for q in items]
+
+    # A reviewer has no content.edit: bulk actions are refused.
+    assert (await api_post(reviewer, base + "/bulk", {"action": "delete", "ids": ids})).status_code == 403
+    # Exactly one scope is required.
+    assert (await api_post(author, base + "/bulk", {"action": "delete"})).status_code == 422
+    assert (await api_post(author, base + "/bulk", {"action": "delete", "ids": ids, "filter": {}})).status_code == 422
+
+    # Send one question to review by id, the rest by filter ("all found").
+    one = await api_post(author, base + "/bulk", {"action": "submit", "ids": ids[:1]})
+    assert one.json() == {"done": 1, "skipped": 0}
+    rest = await api_post(author, base + "/bulk", {"action": "submit", "filter": {"status": "draft"}})
+    assert rest.json() == {"done": 3, "skipped": 0}
+    assert (await author.get(base + "?status=in_review")).json()["total"] == 4
+
+    # Questions under review cannot be deleted.
+    refused = await api_post(author, base + "/bulk", {"action": "delete", "ids": ids})
+    assert refused.json() == {"done": 0, "skipped": 4}
+    assert (await author.get(base)).json()["total"] == 4
+
+    # Drafts can: import two more and delete one by id, the other by filter.
+    more = [imported("d-1", text_ru="Черновик, который удалят по номеру?"), imported("d-2", text_ru="Черновик, который удалят по фильтру?")]
+    assert (await api_post(author, base + "/import", {"rows": more})).status_code == 201
+    drafts = (await author.get(base + "?status=draft")).json()["items"]
+    assert len(drafts) == 2
+    assert (await api_post(author, base + "/bulk", {"action": "delete", "ids": [drafts[0]["id"]]})).json() == {"done": 1, "skipped": 0}
+    assert (await api_post(author, base + "/bulk", {"action": "delete", "filter": {"status": "draft"}})).json() == {"done": 1, "skipped": 0}
+    assert (await author.get(base)).json()["total"] == 4
