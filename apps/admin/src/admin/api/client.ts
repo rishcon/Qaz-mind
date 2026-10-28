@@ -264,6 +264,34 @@ export interface Monitoring {
 
 // ----- calls -------------------------------------------------------------------------------------------------
 
+export interface SchoolApplication {
+  id: string;
+  school_name: string;
+  type: string;
+  city: string;
+  contact_name: string;
+  contact_position: string;
+  contact_phone: string;
+  approx_students: number;
+  status: 'pending' | 'approved' | 'rejected';
+  rejection_reason: string;
+  organization_id: string | null;
+  created_at: string;
+  applicant: { id: string; name: string; email: string };
+}
+
+export interface OrganizationRow {
+  id: string;
+  name: string;
+  type: string;
+  city: string;
+  status: 'active' | 'suspended' | 'archived';
+  created_at: string;
+  class_count: number;
+  teacher_count: number;
+  student_count: number;
+}
+
 export const adminApi = {
   // sign-in
   login: (email: string, password: string) =>
@@ -328,6 +356,13 @@ export const adminApi = {
     ids?: string[];
     filter?: { subject_id?: string; status?: string; search?: string };
   }) => post<{ done: number; skipped: number }>('/admin/questions/bulk', body),
+  schoolApplications: (status?: string) =>
+    get<{ items: SchoolApplication[] }>(`/admin/school-applications${query({ status })}`),
+  approveSchoolApplication: (id: string) =>
+    post<{ status: string; organization_id: string }>(`/admin/school-applications/${id}/approve`),
+  rejectSchoolApplication: (id: string, reason: string) =>
+    post<{ status: string }>(`/admin/school-applications/${id}/reject`, { reason }),
+  organizations: () => get<{ items: OrganizationRow[] }>('/admin/organizations'),
   importQuestions: (rows: QuestionBody[]) => post<{ created: number }>('/admin/questions/import', { rows }),
   /** Checks the rows on the server without saving anything. Row numbers count the rows that were sent. */
   checkQuestionImport: (rows: QuestionBody[]) =>

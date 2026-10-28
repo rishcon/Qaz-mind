@@ -12,6 +12,7 @@ import {
   Settings,
   LogOut,
   User,
+  Building2,
 } from 'lucide-react';
 
 interface DashboardShellProps {
@@ -22,6 +23,8 @@ interface DashboardShellProps {
   profile: StudentProfile;
   mistakesCount?: number;
   onLogout: () => void;
+  /** Set only when the person has a school membership: opens the school workspace. */
+  onOpenSchool?: () => void;
   children: React.ReactNode;
 }
 
@@ -33,6 +36,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   profile,
   mistakesCount = 0,
   onLogout,
+  onOpenSchool,
   children,
 }) => {
   const navItems = [
@@ -185,6 +189,17 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
             <Settings className="w-4 h-4 text-[#74736F]" />
             <span>{currentLang === 'ru' ? 'Настройки' : 'Баптаулар'}</span>
           </button>
+
+          {onOpenSchool && (
+            <button
+              type="button"
+              onClick={onOpenSchool}
+              className="w-full flex items-center gap-3 px-3.5 py-2 text-xs font-medium rounded transition-colors cursor-pointer text-[#74736F] hover:bg-[#EAE7DF] hover:text-[#171717]"
+            >
+              <Building2 className="w-4 h-4 text-[#74736F]" />
+              <span>{currentLang === 'ru' ? 'Кабинет школы' : 'Мектеп кабинеті'}</span>
+            </button>
+          )}
 
           {/* Student Profile Card */}
           <div

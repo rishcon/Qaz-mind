@@ -1,207 +1,181 @@
 import React, { useState } from 'react';
-import {
-  Building2,
-  CheckCircle2,
-  XCircle,
-  HelpCircle,
-  Download,
-  ExternalLink,
-  Users,
-  ShieldCheck,
-  Check,
-  X,
-  AlertTriangle,
-} from 'lucide-react';
-import { SchoolOrganization, SchoolApprovalStatus } from '../types';
-import { adminService } from '../services/adminService';
+import { Building2 } from 'lucide-react';
+import { adminApi, OrganizationRow, SchoolApplication } from '../api/client';
+import { runAction, useAdminData } from '../api/useAdminData';
+import { useStaff } from '../auth/StaffAuth';
 import { DataTable, ColumnDef, TableFilter } from '../components/ui/DataTable';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { ConfirmationDialog } from '../components/ui/ConfirmationDialog';
-import { ActionResultNotice, failureResult, type ActionResult } from '../components/ui/ConnectionNotice';
+import { ActionResultNotice, type ActionResult } from '../components/ui/ConnectionNotice';
+import { ErrorBlock, ForbiddenBlock, fmtDate } from '../components/ui/PageState';
 
 interface SchoolsPageProps {
   onNavigate: (path: string) => void;
 }
 
-export const SchoolsPage: React.FC<SchoolsPageProps> = ({ onNavigate }) => {
-  const [activeView, setActiveView] = useState<'all' | 'pending'>('all');
-  const [search, setSearch] = useState('');
-  const [cityFilter, setCityFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
+const TYPE_LABELS: Record<string, string> = {
+  school: 'Школа',
+  lyceum: 'Лицей',
+  gymnasium: 'Гимназия',
+  college: 'Колледж',
+  tutoring_center: 'Учебный центр',
+  other: 'Другое',
+};
 
-  // Approval modal
-  const [selectedSchool, setSelectedSchool] = useState<SchoolOrganization | null>(null);
-  const [approveDialogOpen, setApproveDialogOpen] = useState(false);
-  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
-  const [rejectReason, setRejectReason] = useState('');
+type View = 'applications' | 'organizations';
+
+export const SchoolsPage: React.FC<SchoolsPageProps> = () => {
+  const { can } = useStaff();
+  const [view, setView] = useState<View>('applications');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('pending');
+
+  const [selected, setSelected] = useState<SchoolApplication | null>(null);
+  const [approveOpen, setApproveOpen] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ActionResult | null>(null);
 
-  const schools = adminService.getSchools({
-    search,
-    status: activeView === 'pending' ? 'pending_verification' : statusFilter,
-    city: cityFilter,
-  });
+  const allowed = can('schools.read');
+  const canDecide = can('schools.approve');
+  const applications = useAdminData(() => (allowed ? adminApi.schoolApplications() : Promise.resolve({ items: [] })), [allowed], 30000);
+  const organizations = useAdminData(() => (allowed ? adminApi.organizations() : Promise.resolve({ items: [] })), [allowed], 30000);
 
-  const pendingCount = adminService.getSchools({ status: 'pending_verification' }).length;
+  if (!allowed) return <ForbiddenBlock />;
 
-  // City filter options come from the schools themselves, not from a fixed list.
-  const cityOptions = Array.from(new Set(adminService.getSchools().map((s) => s.city)))
-    .sort((a, b) => a.localeCompare(b, 'ru'))
-    .map((city) => ({ label: city, value: city }));
+  const needle = search.trim().toLowerCase();
+  const matches = (...parts: string[]) => !needle || parts.some((p) => p.toLowerCase().includes(needle));
+  const allApplications = applications.data?.items ?? [];
+  const pendingCount = allApplications.filter((a) => a.status === 'pending').length;
+  const shownApplications = allApplications.filter(
+    (a) =>
+      (statusFilter === 'all' || a.status === statusFilter) &&
+      matches(a.school_name, a.city, a.applicant.email, a.applicant.name),
+  );
+  const orgItems = organizations.data?.items ?? [];
+  const shownOrganizations = orgItems.filter((o) => matches(o.name, o.city));
 
   const closeDialogs = () => {
-    setApproveDialogOpen(false);
-    setRejectDialogOpen(false);
-    setSelectedSchool(null);
+    setApproveOpen(false);
+    setRejectOpen(false);
+    setSelected(null);
+    setReason('');
   };
 
-  const handleApprove = () => {
-    if (!selectedSchool) return;
-    try {
-      adminService.approveSchool(selectedSchool.id);
-      setResult({ tone: 'success', text: 'Заявка школы одобрена.' });
-    } catch (error) {
-      setResult(failureResult(error));
+  const decide = async (action: () => Promise<unknown>, success: string) => {
+    setBusy(true);
+    const ok = await runAction(action, success, setResult);
+    setBusy(false);
+    if (ok) {
+      closeDialogs();
+      applications.reload();
+      organizations.reload();
+    } else {
+      closeDialogs();
     }
-    closeDialogs();
   };
 
-  const handleReject = () => {
-    if (!selectedSchool || !rejectReason.trim()) return;
-    try {
-      adminService.rejectSchool(selectedSchool.id, rejectReason.trim());
-      setResult({ tone: 'success', text: 'Заявка школы отклонена.' });
-    } catch (error) {
-      setResult(failureResult(error));
-    }
-    setRejectReason('');
-    closeDialogs();
-  };
-
-  const columns: ColumnDef<SchoolOrganization>[] = [
+  const applicationColumns: ColumnDef<SchoolApplication>[] = [
     {
-      key: 'name',
-      header: 'Школа / Организация',
-      sortable: true,
-      cell: (s) => (
+      key: 'school_name',
+      header: 'Заявка',
+      cell: (a) => (
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-[#FAF9F6] border border-[#E2DED5] flex items-center justify-center text-[#FF5A36]">
             <Building2 className="w-4 h-4" />
           </div>
           <div>
-            <div className="font-semibold text-xs text-[#171717] hover:text-[#FF5A36] transition-colors">
-              {s.name}
-            </div>
+            <div className="font-semibold text-xs text-[#171717]">{a.school_name}</div>
             <div className="text-[11px] text-[#78716C]">
-              {s.city} • БИН: <span className="font-mono">{s.binNumber}</span>
+              {TYPE_LABELS[a.type] ?? a.type} · {a.city}
             </div>
           </div>
         </div>
       ),
     },
     {
-      key: 'type',
-      header: 'Тип заведения',
-      sortable: true,
-      cell: (s) => {
-        const typeMap: Record<string, string> = {
-          lyceum: 'Лицей',
-          gymnasium: 'Гимназия',
-          nis: 'НИШ',
-          bil: 'БИЛ (КТЛ)',
-          private_school: 'Частная школа',
-          public_school: 'Общеобразовательная',
-        };
-        return (
-          <span className="text-xs font-medium text-[#5C574F]">
-            {typeMap[s.type] || s.type}
-          </span>
-        );
-      },
-    },
-    {
-      key: 'totalStudents',
-      header: 'Учащихся',
-      sortable: true,
-      cell: (s) => (
-        <span className="font-semibold text-xs text-[#171717]">
-          {s.totalStudents} <span className="text-[11px] text-[#78716C] font-normal">чел.</span>
-        </span>
-      ),
-    },
-    {
-      key: 'assignedSeats',
-      header: 'Места / Лицензия',
-      sortable: true,
-      cell: (s) => (
+      key: 'applicant',
+      header: 'Заявитель',
+      cell: (a) => (
         <div>
-          <div className="text-xs font-semibold text-[#171717]">
-            {s.assignedSeats} / {s.purchasedSeats}
-          </div>
-          <div className="text-[10px] text-[#258568] font-medium">
-            Лицензия: <StatusBadge status={s.licenseStatus} size="sm" />
+          <div className="text-xs font-medium text-[#171717]">{a.contact_name}{a.contact_position ? `, ${a.contact_position}` : ''}</div>
+          <div className="text-[11px] text-[#78716C]">
+            {a.applicant.email} · {a.contact_phone}
           </div>
         </div>
       ),
     },
     {
-      key: 'approvalStatus',
-      header: 'Статус заявки',
-      sortable: true,
-      cell: (s) => <StatusBadge status={s.approvalStatus} />,
+      key: 'approx_students',
+      header: 'Учащихся (со слов)',
+      cell: (a) => <span className="text-xs font-semibold text-[#171717]">{a.approx_students}</span>,
+    },
+    { key: 'created_at', header: 'Подана', cell: (a) => <span className="text-xs text-[#5C574F]">{fmtDate(a.created_at)}</span> },
+    {
+      key: 'status',
+      header: 'Статус',
+      cell: (a) => (
+        <div className="space-y-1">
+          <StatusBadge status={a.status} />
+          {a.status === 'rejected' && a.rejection_reason && (
+            <div className="text-[11px] text-[#78716C] max-w-[220px]">{a.rejection_reason}</div>
+          )}
+        </div>
+      ),
     },
     {
       key: 'actions',
       header: 'Действия',
       className: 'text-right',
       headerClassName: 'text-right',
-      cell: (s) => (
-        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-          {s.approvalStatus === 'pending_verification' ? (
-            <>
-              <button
-                onClick={() => {
-                  setSelectedSchool(s);
-                  setApproveDialogOpen(true);
-                }}
-                className="px-2.5 py-1 text-xs font-semibold text-white bg-[#258568] hover:bg-[#1D6A53] rounded cursor-pointer shadow-2xs"
-              >
-                Одобрить
-              </button>
-              <button
-                onClick={() => {
-                  setSelectedSchool(s);
-                  setRejectDialogOpen(true);
-                }}
-                className="px-2 py-1 text-xs text-[#C94A43] bg-white border border-[#FCA5A5] rounded hover:bg-[#FFF1F2] cursor-pointer"
-              >
-                Отклонить
-              </button>
-            </>
-          ) : (
+      cell: (a) =>
+        a.status === 'pending' && canDecide ? (
+          <div className="flex items-center justify-end gap-1.5">
             <button
-              onClick={() => onNavigate(`/admin/schools/${s.id}`)}
-              className="px-2.5 py-1 text-xs text-[#171717] bg-white border border-[#E2DED5] rounded hover:bg-[#F5F3EE] cursor-pointer"
+              onClick={() => {
+                setSelected(a);
+                setApproveOpen(true);
+              }}
+              className="px-2.5 py-1 text-xs font-semibold text-white bg-[#258568] hover:bg-[#1D6A53] rounded cursor-pointer shadow-2xs"
             >
-              Подробнее →
+              Одобрить
             </button>
-          )}
-        </div>
-      ),
+            <button
+              onClick={() => {
+                setSelected(a);
+                setRejectOpen(true);
+              }}
+              className="px-2 py-1 text-xs text-[#C94A43] bg-white border border-[#FCA5A5] rounded hover:bg-[#FFF1F2] cursor-pointer"
+            >
+              Отклонить
+            </button>
+          </div>
+        ) : null,
     },
   ];
 
-  const filters: TableFilter[] = [
+  const organizationColumns: ColumnDef<OrganizationRow>[] = [
     {
-      key: 'city',
-      label: 'Город',
-      selectedValue: cityFilter,
-      onChange: setCityFilter,
-      options: [
-        { label: 'Все города', value: 'all' },
-        ...cityOptions,
-      ],
+      key: 'name',
+      header: 'Организация',
+      cell: (o) => (
+        <div>
+          <div className="font-semibold text-xs text-[#171717]">{o.name}</div>
+          <div className="text-[11px] text-[#78716C]">
+            {TYPE_LABELS[o.type] ?? o.type} · {o.city}
+          </div>
+        </div>
+      ),
     },
+    { key: 'class_count', header: 'Классов', cell: (o) => <span className="text-xs font-semibold">{o.class_count}</span> },
+    { key: 'teacher_count', header: 'Учителей', cell: (o) => <span className="text-xs font-semibold">{o.teacher_count}</span> },
+    { key: 'student_count', header: 'Учеников', cell: (o) => <span className="text-xs font-semibold">{o.student_count}</span> },
+    { key: 'created_at', header: 'Подключена', cell: (o) => <span className="text-xs text-[#5C574F]">{fmtDate(o.created_at)}</span> },
+    { key: 'status', header: 'Статус', cell: (o) => <StatusBadge status={o.status} /> },
+  ];
+
+  const statusFilters: TableFilter[] = [
     {
       key: 'status',
       label: 'Статус',
@@ -209,97 +183,94 @@ export const SchoolsPage: React.FC<SchoolsPageProps> = ({ onNavigate }) => {
       onChange: setStatusFilter,
       options: [
         { label: 'Все статусы', value: 'all' },
+        { label: 'На проверке', value: 'pending' },
         { label: 'Одобренные', value: 'approved' },
-        { label: 'На проверке', value: 'pending_verification' },
-        { label: 'Отклоненные', value: 'rejected' },
+        { label: 'Отклонённые', value: 'rejected' },
       ],
     },
   ];
 
+  const tab = (id: View, text: string, badge?: number) => (
+    <button
+      onClick={() => setView(id)}
+      className={`px-3 py-1 rounded-md font-medium flex items-center gap-1.5 cursor-pointer ${
+        view === id ? 'bg-[#171717] text-white shadow-xs' : 'text-[#78716C] hover:text-[#171717]'
+      }`}
+    >
+      <span>{text}</span>
+      {!!badge && <span className="px-1.5 rounded-full text-[10px] font-bold bg-[#FF5A36] text-white">{badge}</span>}
+    </button>
+  );
+
+  const error = view === 'applications' ? applications.error : organizations.error;
+
   return (
     <div className="space-y-5 animate-in fade-in duration-150">
-      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-[#E2DED5]">
         <div>
           <h1 className="text-xl font-bold text-[#171717]">Школы и учебные заведения</h1>
           <p className="text-xs text-[#78716C] mt-0.5">
-            Управление организациями, одобрение заявок на подключение и распределение школьных лицензий ЕНТ.
+            Заявки на подключение и подключённые организации. Одобрение создаёт организацию и назначает заявителя её администратором.
           </p>
         </div>
-
-        {/* View toggle tabs */}
         <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-[#E2DED5] text-xs">
-          <button
-            onClick={() => setActiveView('all')}
-            className={`px-3 py-1 rounded-md font-medium cursor-pointer ${
-              activeView === 'all'
-                ? 'bg-[#171717] text-white shadow-xs'
-                : 'text-[#78716C] hover:text-[#171717]'
-            }`}
-          >
-            Все школы ({adminService.getSchools().length})
-          </button>
-          <button
-            onClick={() => setActiveView('pending')}
-            className={`px-3 py-1 rounded-md font-medium flex items-center gap-1.5 cursor-pointer ${
-              activeView === 'pending'
-                ? 'bg-[#FF5A36] text-white shadow-xs'
-                : 'text-[#78716C] hover:text-[#171717]'
-            }`}
-          >
-            <span>Заявки на верификацию</span>
-            {pendingCount > 0 && (
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                activeView === 'pending' ? 'bg-white text-[#FF5A36]' : 'bg-[#FF5A36] text-white'
-              }`}>
-                {pendingCount}
-              </span>
-            )}
-          </button>
+          {tab('applications', 'Заявки', pendingCount)}
+          {tab('organizations', `Организации${organizations.data ? ` (${orgItems.length})` : ''}`)}
         </div>
       </div>
 
       <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
+      {error && <ErrorBlock text={error} onRetry={view === 'applications' ? applications.reload : organizations.reload} />}
 
-      {/* Main Table */}
-      <DataTable
-        data={schools}
-        columns={columns}
-        keyExtractor={(s) => s.id}
-        searchPlaceholder="Поиск по названию школы или городу..."
-        searchValue={search}
-        onSearchChange={setSearch}
-        filters={activeView === 'all' ? filters : undefined}
-        onRowClick={(s) => onNavigate(`/admin/schools/${s.id}`)}
-      />
+      {view === 'applications' ? (
+        <DataTable
+          data={shownApplications}
+          columns={applicationColumns}
+          keyExtractor={(a) => a.id}
+          searchPlaceholder="Поиск по школе, городу или email заявителя..."
+          searchValue={search}
+          onSearchChange={setSearch}
+          filters={statusFilters}
+          emptyMessage={applications.loading ? 'Загрузка…' : 'Заявок нет'}
+        />
+      ) : (
+        <DataTable
+          data={shownOrganizations}
+          columns={organizationColumns}
+          keyExtractor={(o) => o.id}
+          searchPlaceholder="Поиск по названию или городу..."
+          searchValue={search}
+          onSearchChange={setSearch}
+          emptyMessage={organizations.loading ? 'Загрузка…' : 'Организаций пока нет'}
+        />
+      )}
 
-      {/* Approval Confirmation Dialog */}
       <ConfirmationDialog
-        isOpen={approveDialogOpen}
-        title={`Одобрить заявку: ${selectedSchool?.name}`}
-        message="Статус заявки школы изменится на «Одобрено»."
+        isOpen={approveOpen}
+        title={`Одобрить заявку: ${selected?.school_name ?? ''}`}
+        message={`Будет создана организация, а ${selected?.applicant.email ?? 'заявитель'} станет её администратором. Данные заявки не проверены автоматически: убедитесь, что учреждение настоящее.`}
         variant="primary"
-        confirmLabel="Одобрить подключение"
-        onConfirm={handleApprove}
-        onCancel={() => setApproveDialogOpen(false)}
+        confirmLabel={busy ? 'Одобряем…' : 'Одобрить подключение'}
+        confirmDisabled={busy}
+        onConfirm={() => selected && decide(() => adminApi.approveSchoolApplication(selected.id), 'Заявка одобрена, организация создана.')}
+        onCancel={closeDialogs}
       />
 
-      {/* Reject Confirmation Dialog */}
       <ConfirmationDialog
-        isOpen={rejectDialogOpen}
-        title={`Отклонить заявку: ${selectedSchool?.name}`}
-        message="Укажите причину отклонения заявки."
+        isOpen={rejectOpen}
+        title={`Отклонить заявку: ${selected?.school_name ?? ''}`}
+        message="Причина сохранится и будет видна заявителю."
         variant="danger"
-        confirmLabel="Отклонить заявку"
-        confirmDisabled={!rejectReason.trim()}
-        onConfirm={handleReject}
-        onCancel={() => setRejectDialogOpen(false)}
+        confirmLabel={busy ? 'Отклоняем…' : 'Отклонить заявку'}
+        confirmDisabled={busy || reason.trim().length < 5}
+        onConfirm={() => selected && decide(() => adminApi.rejectSchoolApplication(selected.id, reason.trim()), 'Заявка отклонена.')}
+        onCancel={closeDialogs}
       >
         <textarea
           rows={3}
-          value={rejectReason}
-          onChange={(e) => setRejectReason(e.target.value)}
-          placeholder="Причина отклонения"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Причина отклонения (не короче 5 символов)"
           className="w-full text-xs p-2.5 bg-white border border-[#E2DED5] rounded-md text-[#171717]"
         />
       </ConfirmationDialog>

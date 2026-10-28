@@ -248,3 +248,74 @@ export const mistakesApi = {
       selected_label: label,
     }),
 };
+
+// ----- schools --------------------------------------------------------------------------------------------
+
+export type OrganizationType = 'school' | 'lyceum' | 'gymnasium' | 'college' | 'tutoring_center' | 'other';
+
+export interface ApiSchoolApplicationInput {
+  school_name: string;
+  type: OrganizationType;
+  city: string;
+  contact_name: string;
+  contact_position: string;
+  contact_phone: string;
+  approx_students: number;
+}
+
+export interface ApiSchoolApplication extends ApiSchoolApplicationInput {
+  id: string;
+  status: 'pending' | 'approved' | 'rejected';
+  rejection_reason: string;
+  organization_id: string | null;
+  created_at: string;
+}
+
+export interface ApiOrganization {
+  id: string;
+  name: string;
+  type: OrganizationType;
+  city: string;
+  status: 'active' | 'suspended' | 'archived';
+}
+
+export interface ApiMembership {
+  organization: ApiOrganization;
+  role: 'SCHOOL_ADMIN' | 'TEACHER';
+}
+
+export interface ApiSchoolClass {
+  id: string;
+  name: string;
+  academic_year: string;
+  grade: number | null;
+  status: 'active' | 'archived';
+  student_count: number;
+  teacher_count: number;
+}
+
+export interface ApiTeacher {
+  user_id: string;
+  name: string;
+  email: string;
+  status: string;
+  class_ids: string[];
+}
+
+export const schoolApi = {
+  apply: (body: ApiSchoolApplicationInput) => apiRequest<ApiSchoolApplication>('POST', '/school-applications', body),
+  myApplications: () => apiRequest<ApiSchoolApplication[]>('GET', '/school-applications/mine'),
+  myOrganizations: () => apiRequest<ApiMembership[]>('GET', '/me/organizations'),
+  classes: (orgId: string) => apiRequest<ApiSchoolClass[]>('GET', `/organizations/${encodeURIComponent(orgId)}/classes`),
+  createClass: (orgId: string, body: { name: string; academic_year: string; grade?: number | null }) =>
+    apiRequest<ApiSchoolClass>('POST', `/organizations/${encodeURIComponent(orgId)}/classes`, body),
+  updateClass: (orgId: string, classId: string, body: { name?: string; status?: 'active' | 'archived' }) =>
+    apiRequest<ApiSchoolClass>('PATCH', `/organizations/${encodeURIComponent(orgId)}/classes/${encodeURIComponent(classId)}`, body),
+  teachers: (orgId: string) => apiRequest<ApiTeacher[]>('GET', `/organizations/${encodeURIComponent(orgId)}/teachers`),
+  setTeacherClasses: (orgId: string, teacherId: string, classIds: string[]) =>
+    apiRequest<ApiTeacher[]>(
+      'POST',
+      `/organizations/${encodeURIComponent(orgId)}/teachers/${encodeURIComponent(teacherId)}/classes`,
+      { class_ids: classIds },
+    ),
+};

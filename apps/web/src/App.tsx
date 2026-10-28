@@ -3,9 +3,11 @@ import { Language } from './types';
 import { DashboardView, MistakeItem, StudentProfile } from './types/dashboard';
 import { UserAccount } from './types/auth';
 import { useAuth } from './auth/AuthProvider';
-import { authApi, learningApi, MeResponse, OnboardingPayload, mistakesApi, practiceApi, profileApi, ProfilePatch } from './api/endpoints';
+import { authApi, learningApi, MeResponse, OnboardingPayload, mistakesApi, practiceApi, schoolApi, profileApi, ProfilePatch } from './api/endpoints';
 import { emptyStudentProfile, toProfilePatch, toStudentProfile } from './api/mappers';
 import { UnavailablePage } from './components/common/UnavailablePage';
+import { SchoolApplyPage } from './components/school/SchoolApplyPage';
+import { SchoolCabinet } from './components/school/SchoolCabinet';
 import { ResetPasswordPage } from './components/auth/ResetPasswordPage';
 
 // Landing Page Components
@@ -42,7 +44,7 @@ import { FocusMistakeReview } from './components/focus/FocusMistakeReview';
 import { FocusPractice } from './components/focus/FocusPractice';
 
 /** Screens that are not connected to the server yet. They say so and show no data. */
-type UnavailableScreen = 'schools' | 'schools_apply' | 'school' | 'teacher' | 'exam' | 'not_found';
+type UnavailableScreen = 'schools' | 'teacher' | 'exam' | 'not_found';
 
 const UNAVAILABLE_COPY: Record<
   UnavailableScreen,
@@ -52,19 +54,6 @@ const UNAVAILABLE_COPY: Record<
     label: 'Кабинеты школ',
     title: 'Раздел в разработке',
     description: 'Кабинеты школ подключаются к серверу на следующих этапах. Здесь пока нет реальных данных.',
-    toDashboard: false,
-  },
-  schools_apply: {
-    label: 'Заявка школы',
-    title: 'Подача заявки откроется позже',
-    description:
-      'Заявки школ будут храниться на сервере и рассматриваться администратором платформы. Пока эта функция не подключена, заявка никуда не отправляется.',
-    toDashboard: false,
-  },
-  school: {
-    label: 'Кабинет школы',
-    title: 'Раздел в разработке',
-    description: 'Кабинеты школ и учителей подключаются на следующих этапах. Здесь пока нет реальных данных.',
     toDashboard: false,
   },
   teacher: {
@@ -91,8 +80,6 @@ const UNAVAILABLE_COPY: Record<
 /** Routes that render an unavailable screen instead of a feature. */
 const UNAVAILABLE_ROUTES: Partial<Record<AppRoute, UnavailableScreen>> = {
   schools: 'schools',
-  schools_apply: 'schools_apply',
-  school: 'school',
   teacher: 'teacher',
   not_found: 'not_found',
   focus_exam: 'exam',
@@ -281,6 +268,16 @@ export default function App() {
     void loadMistakes();
   }, [auth.user?.id, currentRoute, dashboardView]);
 
+  // The school workspace link appears only for people who have a school membership on the server.
+  const [hasSchool, setHasSchool] = useState(false);
+  useEffect(() => {
+    if (!auth.user || currentRoute !== 'app') return;
+    schoolApi
+      .myOrganizations()
+      .then((items) => setHasSchool(items.length > 0))
+      .catch(() => setHasSchool(false));
+  }, [auth.user?.id, currentRoute]);
+
   // Auth gating: personal study and focus screens need a session; study needs a completed onboarding.
   const sessionRoutes: AppRoute[] = [
     'app',
@@ -292,6 +289,11 @@ export default function App() {
     'focus_mistake_review',
   ];
   useEffect(() => {
+    // The school workspace needs a session, but not a finished student onboarding.
+    if (auth.status !== 'loading' && currentRoute === 'school' && !auth.user) {
+      navigateTo('login', '/login');
+      return;
+    }
     if (auth.status === 'loading' || !sessionRoutes.includes(currentRoute)) return;
     if (!auth.user) {
       navigateTo('login', '/login');
@@ -394,6 +396,22 @@ export default function App() {
   // ==========================================
   // ROUTE RENDERING
   // ==========================================
+
+  if (currentRoute === 'schools_apply') {
+    return (
+      <SchoolApplyPage
+        signedIn={!!auth.user}
+        onLogin={() => navigateTo('login', '/login')}
+        onOpenCabinet={() => navigateTo('school', '/school')}
+        onBack={() => navigateTo(auth.user ? 'app' : 'landing', auth.user ? '/app' : '/home')}
+      />
+    );
+  }
+
+  if (currentRoute === 'school') {
+    if (!auth.user) return null; // the guard above sends an anonymous visitor to the login page
+    return <SchoolCabinet onExit={() => navigateTo('app', '/app')} onApply={() => navigateTo('schools_apply', '/schools/apply')} />;
+  }
 
   const unavailableScreen = UNAVAILABLE_ROUTES[currentRoute];
   if (unavailableScreen) {
@@ -579,6 +597,7 @@ export default function App() {
         profile={profile}
         mistakesCount={unresolvedMistakesCount}
         onLogout={handleLogout}
+        onOpenSchool={hasSchool ? () => navigateTo('school', '/school') : undefined}
       >
         {dashboardView === 'today' && (
           <TodayView
