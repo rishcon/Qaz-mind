@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, SmallInteger, String, UniqueConstraint, Uuid
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.time import utcnow
@@ -32,6 +33,8 @@ class Assignment(Base):
     title: Mapped[str] = mapped_column(String(160))
     subject_id: Mapped[str] = mapped_column(String(32), ForeignKey("subjects.id"))
     question_count: Mapped[int] = mapped_column(SmallInteger)
+    # Questions from the school's own bank chosen by the teacher; the rest of `question_count` comes from the platform.
+    school_question_ids: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     max_attempts: Mapped[int] = mapped_column(SmallInteger, default=1)
     # Which attempt counts as the result: the best one or the last one. Shown to the teacher explicitly.

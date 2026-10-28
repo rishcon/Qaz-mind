@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, Building2, ClipboardList, GraduationCap, LayoutDashboard, UserCog, Users } from 'lucide-react';
+import { ArrowLeft, Building2, ClipboardList, FileQuestion, GraduationCap, LayoutDashboard, UserCog, Users } from 'lucide-react';
 import { ApiMembership, ApiSchoolApplication, ApiSchoolClass, schoolApi } from '../../api/endpoints';
 import { errorText } from '../../api/client';
 import { AssignmentsTab } from './AssignmentsTab';
+import { QuestionsTab } from './QuestionsTab';
 import { ClassesTab } from './ClassesTab';
 import { OverviewTab, SchoolTab } from './OverviewTab';
 import { StaffTab } from './StaffTab';
@@ -89,6 +90,7 @@ export const SchoolCabinet: React.FC<SchoolCabinetProps> = ({ myUserId, accountT
     { id: 'classes', label: 'Классы', icon: <GraduationCap className="w-4 h-4" /> },
     { id: 'students', label: 'Ученики', icon: <Users className="w-4 h-4" />, admin: true },
     { id: 'staff', label: 'Сотрудники', icon: <UserCog className="w-4 h-4" />, admin: true },
+    { id: 'questions', label: 'Вопросы', icon: <FileQuestion className="w-4 h-4" /> },
     { id: 'assignments', label: 'Задания', icon: <ClipboardList className="w-4 h-4" /> },
   ];
   const visibleTabs = tabs.filter((t) => !t.admin || isAdmin);
@@ -207,6 +209,7 @@ export const SchoolCabinet: React.FC<SchoolCabinetProps> = ({ myUserId, accountT
             {active === 'classes' && <ClassesTab orgId={orgId} classes={classes} isAdmin={!!isAdmin} writable={!!writable} onChanged={changed} />}
             {active === 'students' && isAdmin && <StudentsTab orgId={orgId} version={version} />}
             {active === 'staff' && isAdmin && <StaffTab orgId={orgId} classes={classes} writable={!!writable} myUserId={myUserId} onChanged={changed} />}
+            {active === 'questions' && <QuestionsTab orgId={orgId} writable={!!writable} version={version} onChanged={changed} />}
             {active === 'assignments' && <AssignmentsTab orgId={orgId} classes={classes} writable={!!writable} />}
           </main>
         </div>

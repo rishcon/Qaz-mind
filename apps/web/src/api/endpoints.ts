@@ -406,6 +406,8 @@ export interface ApiAssignmentInput {
   subject_id: string;
   question_count: number;
   class_ids: string[];
+  /** Questions from the school's own bank; the rest of question_count comes from the platform bank. */
+  school_question_ids: string[];
   due_at: string | null;
   max_attempts: number;
   score_policy: 'best' | 'last';
@@ -597,3 +599,51 @@ export interface ApiMyClass {
   organization_id: string;
   organization_name: string;
 }
+
+
+// ----- the school's own questions -----------------------------------------------------------------------------
+
+export interface ApiSchoolQuestionInput {
+  subject_id: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  points?: number;
+  text_ru: string;
+  text_kz?: string;
+  options: { label: OptionLabel; text_ru: string; text_kz?: string }[];
+  correct_label: OptionLabel;
+  explanation_ru?: string;
+  explanation_kz?: string;
+}
+
+export interface ApiSchoolQuestion extends Required<Omit<ApiSchoolQuestionInput, 'points'>> {
+  id: string;
+  points: number;
+  status: 'active' | 'archived';
+  author: string;
+  mine: boolean;
+  used_in_assignments: number;
+  can_manage: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+const questionsPath = (orgId: string) => `/organizations/${encodeURIComponent(orgId)}/questions`;
+
+export const schoolQuestionApi = {
+  list: (orgId: string, params: { subject_id?: string; status?: 'active' | 'archived' | 'all'; search?: string } = {}) => {
+    const q = new URLSearchParams();
+    if (params.subject_id) q.set('subject_id', params.subject_id);
+    if (params.status) q.set('status', params.status);
+    if (params.search) q.set('search', params.search);
+    const qs = q.toString();
+    return apiRequest<{ items: ApiSchoolQuestion[] }>('GET', `${questionsPath(orgId)}${qs ? `?${qs}` : ''}`);
+  },
+  create: (orgId: string, body: ApiSchoolQuestionInput) => apiRequest<ApiSchoolQuestion>('POST', questionsPath(orgId), body),
+  update: (orgId: string, id: string, body: ApiSchoolQuestionInput) =>
+    apiRequest<ApiSchoolQuestion>('PUT', `${questionsPath(orgId)}/${encodeURIComponent(id)}`, body),
+  archive: (orgId: string, id: string) => apiRequest<{ status: string }>('POST', `${questionsPath(orgId)}/${encodeURIComponent(id)}/archive`, {}),
+  restore: (orgId: string, id: string) => apiRequest<{ status: string }>('POST', `${questionsPath(orgId)}/${encodeURIComponent(id)}/restore`, {}),
+  remove: (orgId: string, id: string) => apiRequest<void>('DELETE', `${questionsPath(orgId)}/${encodeURIComponent(id)}`),
+  importRows: (orgId: string, rows: ApiSchoolQuestionInput[]) =>
+    apiRequest<{ created: number }>('POST', `${questionsPath(orgId)}/import`, { rows }),
+};

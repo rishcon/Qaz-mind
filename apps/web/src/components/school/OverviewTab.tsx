@@ -3,7 +3,7 @@ import { Check } from 'lucide-react';
 import { ApiSchoolOverview, schoolApi } from '../../api/endpoints';
 import { errorText } from '../../api/client';
 
-export type SchoolTab = 'overview' | 'classes' | 'students' | 'staff' | 'assignments';
+export type SchoolTab = 'overview' | 'classes' | 'students' | 'staff' | 'questions' | 'assignments';
 
 interface OverviewTabProps {
   orgId: string;

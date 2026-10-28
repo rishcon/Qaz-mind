@@ -94,6 +94,7 @@ class AssignmentService:
             subject_id=assignment.subject_id,
             question_count=assignment.question_count,
             class_ids=await self._class_ids(assignment.id),
+            school_question_ids=[uuid.UUID(q) for q in assignment.school_question_ids],
             due_at=assignment.due_at,
             max_attempts=assignment.max_attempts,
             score_policy=assignment.score_policy,
@@ -138,8 +139,26 @@ class AssignmentService:
         if body.due_at is not None and body.due_at <= utcnow():
             raise AppError(422, "DUE_IN_PAST", "Срок сдачи должен быть в будущем")
 
+    async def _check_school_questions(self, org_id: uuid.UUID, body: AssignmentIn) -> list[str]:
+        ids = list(dict.fromkeys(body.school_question_ids))
+        if len(ids) > body.question_count:
+            raise AppError(422, "TOO_MANY_SCHOOL_QUESTIONS", "Выбрано больше своих вопросов, чем всего вопросов в задании")
+        if not ids:
+            return []
+        rows = {
+            q.id: q
+            for q in (await self.db.execute(select(Question).where(Question.id.in_(ids), Question.organization_id == org_id))).scalars()
+        }
+        if set(rows) != set(ids):
+            raise AppError(404, "NOT_FOUND", "Вопрос не найден")
+        for q in rows.values():
+            if q.status != "school" or q.subject_id != body.subject_id:
+                raise AppError(422, "SCHOOL_QUESTION_INVALID", "Свои вопросы должны быть активными и по предмету задания")
+        return [str(i) for i in ids]
+
     async def create(self, org_id: uuid.UUID, member: OrganizationMember, body: AssignmentIn) -> AssignmentOut:
         await self._check_subject_and_due(body)
+        school_ids = await self._check_school_questions(org_id, body)
         class_ids = await self._checked_classes(org_id, member, body.class_ids)
         assignment = Assignment(
             organization_id=org_id,
@@ -147,6 +166,7 @@ class AssignmentService:
             title=body.title,
             subject_id=body.subject_id,
             question_count=body.question_count,
+            school_question_ids=school_ids,
             due_at=body.due_at,
             max_attempts=body.max_attempts,
             score_policy=body.score_policy,
@@ -165,7 +185,9 @@ class AssignmentService:
         if assignment.status != "draft":
             raise AppError(409, "NOT_A_DRAFT", "Изменять можно только черновик")
         await self._check_subject_and_due(body)
+        school_ids = await self._check_school_questions(org_id, body)
         class_ids = await self._checked_classes(org_id, member, body.class_ids)
+        assignment.school_question_ids = school_ids
         for field in ("title", "subject_id", "question_count", "due_at", "max_attempts", "score_policy", "reveal"):
             setattr(assignment, field, getattr(body, field))
         existing = set(await self._class_ids(assignment.id))
@@ -200,21 +222,44 @@ class AssignmentService:
         if assignment.due_at is not None and assignment.due_at <= utcnow():
             raise AppError(422, "DUE_IN_PAST", "Срок сдачи уже прошёл: измените его в черновике")
         await self._checked_classes(org_id, member, await self._class_ids(assignment.id))
+        # The teacher's own questions go in first (they must still be active); the platform bank fills the rest.
+        chosen = [uuid.UUID(q) for q in assignment.school_question_ids]
+        if chosen:
+            active = set(
+                (
+                    await self.db.execute(
+                        select(Question.id).where(
+                            Question.id.in_(chosen),
+                            Question.organization_id == org_id,
+                            Question.status == "school",
+                            Question.subject_id == assignment.subject_id,
+                        )
+                    )
+                ).scalars()
+            )
+            if active != set(chosen):
+                raise AppError(409, "SCHOOL_QUESTION_UNAVAILABLE", "Один из выбранных своих вопросов в архиве или удалён: измените состав задания")
+        need = assignment.question_count - len(chosen)
         published = list(
             (
                 await self.db.execute(
-                    select(Question.id).where(Question.subject_id == assignment.subject_id, Question.status == "published")
+                    select(Question.id).where(
+                        Question.subject_id == assignment.subject_id,
+                        Question.status == "published",
+                        Question.organization_id.is_(None),
+                    )
                 )
             ).scalars()
         )
-        if len(published) < assignment.question_count:
+        if len(published) < need:
             raise AppError(
                 409,
                 "NOT_ENOUGH_QUESTIONS",
-                f"По предмету опубликовано заданий: {len(published)}, а нужно {assignment.question_count}. "
-                "Задание нельзя составить без проверенного контента.",
+                f"В банке платформы по предмету опубликовано заданий: {len(published)}, а нужно {need}. "
+                "Добавьте свои вопросы или уменьшите число вопросов.",
             )
-        picked = random.sample(published, assignment.question_count)
+        picked = chosen + random.sample(published, need)
+        random.shuffle(picked)
         for position, question_id in enumerate(picked, start=1):
             self.db.add(AssignmentQuestion(assignment_id=assignment.id, question_id=question_id, position=position))
         assignment.status = "published"

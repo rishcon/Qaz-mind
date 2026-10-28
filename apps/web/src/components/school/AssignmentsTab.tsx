@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ApiAssignment, ApiAssignmentResults, ApiSchoolClass, ApiSubject, assignmentApi, learningApi } from '../../api/endpoints';
+import { ApiAssignment, ApiAssignmentResults, ApiSchoolClass, ApiSchoolQuestion, ApiSubject, assignmentApi, learningApi, schoolQuestionApi } from '../../api/endpoints';
 import { errorText } from '../../api/client';
 
 interface AssignmentsTabProps {
@@ -32,6 +32,8 @@ export const AssignmentsTab: React.FC<AssignmentsTabProps> = ({ orgId, classes, 
   const [policy, setPolicy] = useState<'best' | 'last'>('best');
   const [reveal, setReveal] = useState<'after_submit' | 'after_close'>('after_close');
   const [picked, setPicked] = useState<string[]>([]);
+  const [own, setOwn] = useState<ApiSchoolQuestion[]>([]);
+  const [ownPicked, setOwnPicked] = useState<string[]>([]);
 
   const activeClasses = classes.filter((c) => c.status === 'active');
   const className = (id: string) => classes.find((c) => c.id === id)?.name ?? '—';
@@ -43,6 +45,19 @@ export const AssignmentsTab: React.FC<AssignmentsTabProps> = ({ orgId, classes, 
       setError(errorText(err));
     }
   }, [orgId]);
+
+  // The school's own questions of the chosen subject can be added to the assignment.
+  useEffect(() => {
+    setOwnPicked([]);
+    if (!subjectId) {
+      setOwn([]);
+      return;
+    }
+    schoolQuestionApi
+      .list(orgId, { subject_id: subjectId, status: 'active' })
+      .then((r) => setOwn(r.items))
+      .catch(() => setOwn([]));
+  }, [orgId, subjectId]);
 
   useEffect(() => {
     void load();
@@ -78,6 +93,7 @@ export const AssignmentsTab: React.FC<AssignmentsTabProps> = ({ orgId, classes, 
         subject_id: subjectId,
         question_count: Number(count),
         class_ids: picked,
+        school_question_ids: ownPicked,
         due_at: due ? new Date(due).toISOString() : null,
         max_attempts: Number(attempts),
         score_policy: policy,
@@ -87,6 +103,7 @@ export const AssignmentsTab: React.FC<AssignmentsTabProps> = ({ orgId, classes, 
     if (ok) {
       setTitle('');
       setPicked([]);
+      setOwnPicked([]);
     }
   };
 
@@ -154,6 +171,28 @@ export const AssignmentsTab: React.FC<AssignmentsTabProps> = ({ orgId, classes, 
               </select>
             </label>
           </div>
+          {own.length > 0 && (
+            <div className="border border-[#EFECE4] rounded-sm p-3 space-y-2">
+              <div className="text-xs font-bold">Свои вопросы школы по этому предмету (необязательно)</div>
+              <div className="max-h-40 overflow-y-auto space-y-1">
+                {own.map((q) => (
+                  <label key={q.id} className="flex items-start gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={ownPicked.includes(q.id)}
+                      onChange={() => setOwnPicked((cur) => (cur.includes(q.id) ? cur.filter((x) => x !== q.id) : [...cur, q.id]))}
+                    />
+                    <span>{q.text_ru.length > 110 ? `${q.text_ru.slice(0, 110)}…` : q.text_ru}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-[11px] text-[#74736F]">
+                Свои вопросы: {ownPicked.length}. Остальные {Math.max(0, Number(count) - ownPicked.length) || 0} вопросов система возьмёт из проверенного банка платформы
+                {Number(count) < ownPicked.length && ' (выбрано больше, чем всего вопросов — увеличьте число)'}.
+              </p>
+            </div>
+          )}
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 items-center">
             <span className="text-xs font-bold">Классы:</span>
             {activeClasses.length === 0 && <span className="text-xs text-[#74736F]">нет доступных классов</span>}
@@ -185,7 +224,7 @@ export const AssignmentsTab: React.FC<AssignmentsTabProps> = ({ orgId, classes, 
                   {a.title} <span className="ml-1 text-xs font-mono font-normal text-[#74736F]">{STATUS_TEXT[a.status]}</span>
                 </div>
                 <div className="text-xs text-[#74736F]">
-                  {a.question_count} вопр. · {a.class_ids.map(className).join(', ')} · срок: {fmtDate(a.due_at)} · попыток: {a.max_attempts} · сдали:{' '}
+                  {a.question_count} вопр.{a.school_question_ids.length > 0 && ` (своих: ${a.school_question_ids.length})`} · {a.class_ids.map(className).join(', ')} · срок: {fmtDate(a.due_at)} · попыток: {a.max_attempts} · сдали:{' '}
                   {a.submitted_count}
                 </div>
               </div>

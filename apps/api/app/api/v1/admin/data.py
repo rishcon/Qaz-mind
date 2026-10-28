@@ -71,7 +71,7 @@ async def overview(ctx: StaffDep, db=Depends(get_db)) -> dict:
     lessons_completed = (
         await scalar(select(func.count()).select_from(LessonProgress).where(LessonProgress.state == "completed"))
     ).scalar_one()
-    question_rows = (await scalar(select(Question.status, func.count()).group_by(Question.status))).all()
+    question_rows = (await scalar(select(Question.status, func.count()).where(Question.organization_id.is_(None)).group_by(Question.status))).all()
     questions = {status: count for status, count in question_rows}
     pending_invitations = (
         await scalar(

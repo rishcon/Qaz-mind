@@ -16,6 +16,8 @@ class AssignmentIn(BaseModel):
     subject_id: str = Field(min_length=1, max_length=32)
     question_count: int = Field(ge=1, le=40)
     class_ids: list[uuid.UUID] = Field(min_length=1, max_length=50)
+    # Questions from the school's own bank; the rest of `question_count` is drawn from the platform bank.
+    school_question_ids: list[uuid.UUID] = Field(default_factory=list, max_length=40)
     due_at: datetime | None = None
     max_attempts: int = Field(default=1, ge=1, le=10)
     score_policy: Literal["best", "last"] = "best"
@@ -33,6 +35,7 @@ class AssignmentOut(BaseModel):
     subject_id: str
     question_count: int
     class_ids: list[uuid.UUID]
+    school_question_ids: list[uuid.UUID] = Field(default_factory=list)
     due_at: datetime | None
     max_attempts: int
     score_policy: str

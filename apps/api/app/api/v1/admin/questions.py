@@ -142,7 +142,8 @@ async def _emails(db, ids: set[uuid.UUID]) -> dict[uuid.UUID, str]:
 
 
 def _filtered(subject_id: str | None, status: str | None, search: str):
-    query = select(Question)
+    # A school's own questions are private to that school and never appear in the platform bank.
+    query = select(Question).where(Question.organization_id.is_(None))
     if subject_id:
         query = query.where(Question.subject_id == subject_id)
     if status:
@@ -179,7 +180,7 @@ async def list_questions(
 
 async def _question(db, question_id: uuid.UUID) -> Question:
     question = await db.get(Question, question_id)
-    if question is None:
+    if question is None or question.organization_id is not None:
         raise AppError(404, "QUESTION_NOT_FOUND", "Вопрос не найден")
     return question
 
@@ -277,11 +278,11 @@ async def _check_import(db, rows: list[QuestionIn]) -> tuple[list[dict], list[di
     existing_text = {
         _norm(t)
         for t in (
-            await db.execute(select(Question.text_ru).where(Question.subject_id.in_(subjects), Question.status != "archived"))
+            await db.execute(select(Question.text_ru).where(Question.subject_id.in_(subjects), Question.status != "archived", Question.organization_id.is_(None)))
         ).scalars()
     }
     ids = [r.external_id for r in rows if r.external_id]
-    taken = set((await db.execute(select(Question.external_id).where(Question.external_id.in_(ids)))).scalars()) if ids else set()
+    taken = set((await db.execute(select(Question.external_id).where(Question.external_id.in_(ids), Question.organization_id.is_(None)))).scalars()) if ids else set()
     seen_ids: dict[str, int] = {}
     seen_text: dict[str, int] = {}
 
@@ -378,7 +379,7 @@ async def bulk(
     if body.ids is not None:
         if not body.ids:
             raise AppError(422, "BULK_SCOPE", "Список вопросов пуст")
-        query = select(Question).where(Question.id.in_(body.ids))
+        query = select(Question).where(Question.id.in_(body.ids), Question.organization_id.is_(None))
     else:
         query = _filtered(body.filter.subject_id, body.filter.status, body.filter.search)
     if body.action == "return" and not body.notes.strip():

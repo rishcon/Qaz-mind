@@ -58,7 +58,7 @@ async def list_subjects(ctx: StaffDep, db=Depends(get_db)) -> dict:
             )
         ).all()
     )
-    questions = dict((await db.execute(select(Question.subject_id, func.count()).group_by(Question.subject_id))).all())
+    questions = dict((await db.execute(select(Question.subject_id, func.count()).where(Question.organization_id.is_(None)).group_by(Question.subject_id))).all())
     return {
         "items": [
             {
