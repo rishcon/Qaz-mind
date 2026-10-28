@@ -1,6 +1,7 @@
 """Import every model so that Base.metadata knows all tables (used by Alembic and tests)."""
 
 from app.models.admin import AuditEvent, StaffInvitation, StaffMember, StaffRole, StaffSession
+from app.models.assignment import Assignment, AssignmentAnswer, AssignmentAttempt, AssignmentClass, AssignmentQuestion
 from app.models.auth import AuthSession, AuthToken
 from app.models.content import CurriculumTopic, Lesson, LessonVersion, Subject
 from app.models.learning import LessonProgress
@@ -22,6 +23,11 @@ from app.models.school import (
 from app.models.user import User
 
 __all__ = [
+    "Assignment",
+    "AssignmentAnswer",
+    "AssignmentAttempt",
+    "AssignmentClass",
+    "AssignmentQuestion",
     "AuditEvent",
     "AuthSession",
     "AuthToken",
