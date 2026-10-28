@@ -227,6 +227,13 @@ export interface QuestionBody {
   external_id: string | null;
 }
 
+export interface ImportReport {
+  dry_run: true;
+  valid: number;
+  errors: Array<{ row: number; message: string }>;
+  warnings: Array<{ row: number; message: string }>;
+}
+
 export interface Question extends QuestionBody {
   id: string;
   type: string;
@@ -315,4 +322,7 @@ export const adminApi = {
   questionTransition: (id: string, action: WorkflowAction, notes = '') =>
     post<{ status: string }>(`/admin/questions/${id}/transition`, { action, notes }),
   importQuestions: (rows: QuestionBody[]) => post<{ created: number }>('/admin/questions/import', { rows }),
+  /** Checks the rows on the server without saving anything. Row numbers count the rows that were sent. */
+  checkQuestionImport: (rows: QuestionBody[]) =>
+    post<ImportReport>('/admin/questions/import?dry_run=true', { rows }),
 };

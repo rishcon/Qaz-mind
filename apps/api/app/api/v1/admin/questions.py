@@ -7,7 +7,7 @@ the correct answer is one of them. Imported rows go through the same validation;
 import uuid
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, or_, select
 
@@ -59,6 +59,9 @@ class QuestionIn(BaseModel):
         labels = [o.label for o in options]
         if labels != list(LABELS[: len(options)]):
             raise ValueError("варианты должны идти по порядку: A, B, C…")
+        texts = [" ".join(o.text_ru.lower().split()) for o in options]
+        if len(set(texts)) != len(texts):
+            raise ValueError("варианты ответа не должны повторяться")
         return options
 
 
@@ -243,24 +246,80 @@ class ImportIn(BaseModel):
     rows: list[QuestionIn] = Field(min_length=1, max_length=500)
 
 
-@router.post("/import", status_code=201)
-async def import_questions(
-    body: ImportIn,
-    meta: MetaDep,
-    ctx: Annotated[StaffContext, Depends(require("content.create"))],
-    db=Depends(get_db),
-) -> dict:
-    # All rows or none: a file with one invalid row is rejected as a whole, with the row number.
-    for index, row in enumerate(body.rows, start=1):
+def _norm(text: str) -> str:
+    return " ".join(text.lower().split())
+
+
+async def _check_import(db, rows: list[QuestionIn]) -> tuple[list[dict], list[dict]]:
+    """Checks every row of an import file. Errors stop the import; warnings are shown to the person who imports.
+
+    Imports are stricter than the editor: a question must carry its external_id (so a file can be loaded only once)
+    and its source, so a reviewer can find where it came from.
+    """
+    errors: list[dict] = []
+    warnings: list[dict] = []
+    subjects = {r.subject_id for r in rows}
+    existing_text = {
+        _norm(t)
+        for t in (
+            await db.execute(select(Question.text_ru).where(Question.subject_id.in_(subjects), Question.status != "archived"))
+        ).scalars()
+    }
+    ids = [r.external_id for r in rows if r.external_id]
+    taken = set((await db.execute(select(Question.external_id).where(Question.external_id.in_(ids)))).scalars()) if ids else set()
+    seen_ids: dict[str, int] = {}
+    seen_text: dict[str, int] = {}
+
+    for n, row in enumerate(rows, start=1):
         try:
             await _validate(db, row)
         except AppError as error:
-            raise AppError(error.status_code, error.code, f"Строка {index}: {error.message}") from error
-    external_ids = [r.external_id for r in body.rows if r.external_id]
-    if external_ids:
-        taken = (await db.execute(select(Question.external_id).where(Question.external_id.in_(external_ids)))).scalars().all()
-        if taken:
-            raise AppError(409, "DUPLICATE_EXTERNAL_ID", f"Эти ID уже есть в банке: {', '.join(sorted(set(taken)))}")
+            errors.append({"row": n, "message": error.message})
+        if not row.external_id:
+            errors.append({"row": n, "message": "не указан external_id"})
+        else:
+            if row.external_id.upper().startswith("EXAMPLE"):
+                errors.append({"row": n, "message": "это пример из документации, его нельзя загружать"})
+            if row.external_id in taken:
+                errors.append({"row": n, "message": f"ID «{row.external_id}» уже есть в банке"})
+            if row.external_id in seen_ids:
+                errors.append({"row": n, "message": f"ID «{row.external_id}» повторяет строку {seen_ids[row.external_id]}"})
+            else:
+                seen_ids[row.external_id] = n
+        if not row.source_reference.strip():
+            errors.append({"row": n, "message": "не указан источник (source)"})
+
+        key = _norm(row.text_ru)
+        if key in existing_text:
+            warnings.append({"row": n, "message": "такой текст вопроса уже есть в банке"})
+        if key in seen_text:
+            warnings.append({"row": n, "message": f"текст повторяет строку {seen_text[key]}"})
+        seen_text.setdefault(key, n)
+        if not row.text_kz.strip() or any(not o.text_kz.strip() for o in row.options):
+            warnings.append({"row": n, "message": "нет казахской версии вопроса или вариантов"})
+        if not row.explanation_ru.strip():
+            warnings.append({"row": n, "message": "нет пояснения"})
+    return errors, warnings
+
+
+@router.post("/import")
+async def import_questions(
+    body: ImportIn,
+    meta: MetaDep,
+    response: Response,
+    ctx: Annotated[StaffContext, Depends(require("content.create"))],
+    dry_run: bool = Query(False),
+    db=Depends(get_db),
+) -> dict:
+    errors, warnings = await _check_import(db, body.rows)
+    if dry_run:
+        bad_rows = {e["row"] for e in errors}
+        return {"dry_run": True, "valid": len(body.rows) - len(bad_rows), "errors": errors, "warnings": warnings}
+    # All rows or none: a file with one invalid row is rejected as a whole, with the row number.
+    if errors:
+        first = errors[0]
+        raise AppError(422, "IMPORT_REJECTED", f"Строка {first['row']}: {first['message']} (всего ошибок: {len(errors)})")
+    response.status_code = 201
     created = []
     for row in body.rows:
         question = Question(status="draft", author_staff_id=ctx.staff.id, created_at=utcnow(), version=1, type="single_choice")

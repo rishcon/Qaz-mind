@@ -1,9 +1,13 @@
 import React, { useState } from 'react';
 import { Upload, AlertTriangle, ArrowRight, ArrowLeft, Download, Check } from 'lucide-react';
-import { adminApi, errorText, QuestionBody } from '../../api/client';
+import { adminApi, errorText, ImportReport, QuestionBody } from '../../api/client';
 import { useAdminData } from '../../api/useAdminData';
 import { ActionResultNotice, type ActionResult } from '../ui/ConnectionNotice';
 import { parseQuestionCsv, QUESTION_CSV_HEADER, type ImportedQuestionRow, type QuestionCsvResult } from '../../utils/questionCsv';
+import { parseQuestionJson, QUESTION_JSON_EXAMPLE, shuffleOptions } from '../../utils/questionJson';
+
+/** The server takes at most this many questions per request. */
+const MAX_ROWS = 500;
 
 interface ImportWizardProps {
   onDone: () => void;
@@ -26,24 +30,34 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
   const catalog = subjects.data?.items ?? [];
   const knownSubjectCodes = catalog.flatMap((subject) => [subject.code, subject.id]);
   const [importing, setImporting] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [report, setReport] = useState<ImportReport | null>(null);
+  // Answer positions in the bank should not follow the order the author wrote them in.
+  const [shuffle, setShuffle] = useState(true);
+  // The rows that were sent to the check. The server counts rows in this order, not in file order.
+  const [sent, setSent] = useState<ImportedQuestionRow[]>([]);
 
-  const toBody = (row: ImportedQuestionRow): QuestionBody => {
+  const toBody = (source: ImportedQuestionRow): QuestionBody => {
+    const row = shuffle ? shuffleOptions(source) : source;
     const subject = catalog.find((s) => s.id === row.subjectCode || s.code === row.subjectCode)!;
     return {
       subject_id: subject.id,
       topic_id: null,
       difficulty: row.difficulty,
-      points: 1,
+      points: row.points,
       text_ru: row.textRu,
-      text_kz: '',
-      options: row.options.map((o) => ({ label: o.label, text_ru: o.textRu, text_kz: '' })),
+      text_kz: row.textKz,
+      options: row.options.map((o) => ({ label: o.label, text_ru: o.textRu, text_kz: o.textKz })),
       correct_label: row.correctLabel,
       explanation_ru: row.explanationRu,
-      explanation_kz: '',
-      source_reference: '',
+      explanation_kz: row.explanationKz,
+      source_reference: row.source,
       external_id: row.externalId,
     };
   };
+
+  /** The file position of a row the server reported, from its position among the rows that were sent. */
+  const lineOf = (serverRow: number): number => sent[serverRow - 1]?.line ?? serverRow;
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -53,26 +67,47 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
     setResult(null);
   };
 
-  const handleCheck = () => {
-    setParsed(parseQuestionCsv(csvText, knownSubjectCodes));
+  const handleCheck = async () => {
+    const isJson = /^[\s\uFEFF]*[[{]/.test(csvText);
+    const next = isJson ? parseQuestionJson(csvText, knownSubjectCodes) : parseQuestionCsv(csvText, knownSubjectCodes);
+    if (next.rows.length > MAX_ROWS) {
+      next.blockedReason = `В файле ${next.rows.length} вопросов, за один раз можно не больше ${MAX_ROWS}. Разделите файл на части.`;
+      next.rows = [];
+    }
+    setParsed(next);
+    setReport(null);
     setResult(null);
+    setSent(next.rows);
     setStep(2);
+    if (next.rows.length === 0) return;
+    setChecking(true);
+    try {
+      setReport(await adminApi.checkQuestionImport(next.rows.map(toBody)));
+    } catch (error) {
+      setResult({ tone: 'error', text: errorText(error) });
+    } finally {
+      setChecking(false);
+    }
   };
 
-  const handleDownloadTemplate = () => {
-    const blob = new Blob([`${QUESTION_CSV_HEADER.join(',')}\n`], { type: 'text/csv;charset=utf-8;' });
+  const download = (content: string, type: string, name: string) => {
+    const blob = new Blob([content], { type });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', 'qazmind_ent_questions_template.csv');
+    link.setAttribute('download', name);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
+  const handleDownloadTemplate = () =>
+    download(`${QUESTION_CSV_HEADER.join(',')}\n`, 'text/csv;charset=utf-8;', 'qazmind_ent_questions_template.csv');
+  const handleDownloadJson = () =>
+    download(JSON.stringify(QUESTION_JSON_EXAMPLE, null, 2), 'application/json', 'qazmind_questions_example.json');
 
   // A refused import keeps the preview on screen; the step changes only when the server accepts the rows.
   const handleImport = async () => {
-    if (!parsed || parsed.rows.length === 0) return;
+    if (!parsed || !canImport) return;
     setImporting(true);
     try {
       await adminApi.importQuestions(parsed.rows.map(toBody));
@@ -83,6 +118,10 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
       setImporting(false);
     }
   };
+
+  // Import opens only when neither the page nor the server found an error: a file is accepted whole or not at all.
+  const canImport =
+    !!parsed && parsed.issues.length === 0 && parsed.rows.length > 0 && !!report && report.errors.length === 0 && !checking;
 
   return (
     <div className="space-y-6">
@@ -97,20 +136,28 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
           </button>
           <div>
             <h1 className="text-lg font-bold text-[#171717]">
-              Массовый импорт вопросов ЕНТ (CSV / Таблицы)
+              Массовый импорт вопросов ЕНТ (JSON / CSV)
             </h1>
             <p className="text-xs text-[#78716C] mt-0.5">
-              Загрузка CSV по шаблону, проверка каждой строки и отправка в банк как черновики. Пустые поля не заполняются автоматически.
+              Загрузка файла, проверка каждой строки на странице и на сервере, отправка в банк как черновики. Пустые поля не заполняются автоматически.
             </p>
           </div>
         </div>
 
-        <button
-          onClick={handleDownloadTemplate}
-          className="px-3 py-1.5 text-xs font-medium text-[#171717] bg-white border border-[#E2DED5] rounded-md hover:bg-[#F5F3EE] flex items-center gap-1.5 cursor-pointer shadow-2xs"
-        >
-          <Download className="w-3.5 h-3.5 text-[#FF5A36]" /> Скачать шаблон CSV
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleDownloadJson}
+            className="px-3 py-1.5 text-xs font-medium text-[#171717] bg-white border border-[#E2DED5] rounded-md hover:bg-[#F5F3EE] flex items-center gap-1.5 cursor-pointer shadow-2xs"
+          >
+            <Download className="w-3.5 h-3.5 text-[#FF5A36]" /> Пример JSON
+          </button>
+          <button
+            onClick={handleDownloadTemplate}
+            className="px-3 py-1.5 text-xs font-medium text-[#171717] bg-white border border-[#E2DED5] rounded-md hover:bg-[#F5F3EE] flex items-center gap-1.5 cursor-pointer shadow-2xs"
+          >
+            <Download className="w-3.5 h-3.5 text-[#FF5A36]" /> Шаблон CSV
+          </button>
+        </div>
       </div>
 
       {/* Step Tracker */}
@@ -146,12 +193,12 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
               <Upload className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-sm font-bold text-[#171717]">Выберите файл CSV по шаблону</p>
-              <p className="text-xs text-[#78716C] mt-1">Кодировка UTF-8, разделитель запятая</p>
+              <p className="text-sm font-bold text-[#171717]">Выберите файл JSON, JSONL или CSV</p>
+              <p className="text-xs text-[#78716C] mt-1">Кодировка UTF-8. Формат определяется по содержимому</p>
             </div>
             <input
               type="file"
-              accept=".csv,text/csv"
+              accept=".json,.jsonl,.csv,application/json,text/csv"
               onChange={handleFileChange}
               className="block mx-auto text-xs text-[#5C574F]"
             />
@@ -166,7 +213,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
               rows={6}
               value={csvText}
               onChange={(e) => setCsvText(e.target.value)}
-              placeholder={QUESTION_CSV_HEADER.join(',')}
+              placeholder={'{"format": "qazmind.questions.v1", "questions": [ … ]}'}
               className="w-full text-xs font-mono p-2.5 bg-[#FAF9F6] border border-[#E2DED5] rounded-md text-[#171717]"
             />
           </div>
@@ -174,11 +221,11 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
           <div className="pt-3 flex justify-end">
             <button
               type="button"
-              onClick={handleCheck}
+              onClick={() => void handleCheck()}
               disabled={!csvText.trim()}
               className="px-4 py-2 text-xs font-semibold text-white bg-[#FF5A36] hover:bg-[#E84D2B] rounded-md flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Проверить строки <ArrowRight className="w-4 h-4" />
+              Проверить файл <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -231,9 +278,48 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
             </div>
           )}
 
-          <p className="text-[11px] text-[#78716C]">
-            Совпадения с уже существующими вопросами банка проверяются на сервере при импорте.
-          </p>
+          <div className="space-y-2 border-t border-[#E2DED5] pt-4">
+            <h3 className="text-xs font-bold text-[#171717] uppercase tracking-wider">Проверка на сервере</h3>
+            {checking && <p className="text-xs text-[#78716C]">Проверяю дубли, ID и источники…</p>}
+            <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
+            {report && (
+              <>
+                <p className="text-xs text-[#5C574F]">
+                  Без ошибок: <b>{report.valid}</b> из {sent.length}. Ошибок: <b>{report.errors.length}</b>, предупреждений:{' '}
+                  <b>{report.warnings.length}</b>.
+                </p>
+                {report.errors.length > 0 && (
+                  <div className="max-h-[200px] overflow-y-auto divide-y divide-[#E2DED5] border border-[#FCA5A5] rounded-lg text-xs">
+                    {report.errors.map((e, i) => (
+                      <div key={`e${i}`} className="p-2.5">
+                        <span className="font-mono font-bold text-[#9F2F28]">№ {lineOf(e.row)}:</span>{' '}
+                        <span className="text-[#5C574F]">{e.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {report.warnings.length > 0 && (
+                  <div className="max-h-[160px] overflow-y-auto divide-y divide-[#E2DED5] border border-[#D89B35]/40 rounded-lg text-xs">
+                    {report.warnings.map((w, i) => (
+                      <div key={`w${i}`} className="p-2.5">
+                        <span className="font-mono font-bold text-[#9A6715]">№ {lineOf(w.row)}:</span>{' '}
+                        <span className="text-[#5C574F]">{w.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            <label className="flex items-center gap-2 text-xs text-[#5C574F] pt-1 cursor-pointer">
+              <input type="checkbox" checked={shuffle} onChange={(e) => setShuffle(e.target.checked)} />
+              Перемешать варианты ответов (вопросы с keep_order остаются как есть)
+            </label>
+            {!canImport && !checking && (
+              <p className="text-[11px] text-[#78716C]">
+                Импорт откроется, когда в файле не останется ошибок: файл принимается целиком или не принимается.
+              </p>
+            )}
+          </div>
 
           <div className="flex items-center justify-between pt-4 border-t border-[#E2DED5]">
             <button
@@ -244,7 +330,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
             </button>
             <button
               onClick={() => setStep(3)}
-              disabled={parsed.rows.length === 0}
+              disabled={!canImport}
               className="px-4 py-1.5 text-xs font-semibold text-white bg-[#FF5A36] hover:bg-[#E84D2B] rounded-md flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Перейти к предпросмотру <ArrowRight className="w-4 h-4" />
@@ -282,6 +368,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
                     </span>
                   ))}
                 </div>
+                <p className="text-[10px] text-[#78716C]">Источник: {row.source || '—'}</p>
               </div>
             ))}
           </div>
@@ -302,8 +389,8 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
             </button>
             <button
               onClick={() => void handleImport()}
-              disabled={importing}
-              className="px-4 py-1.5 text-xs font-semibold text-white bg-[#258568] hover:bg-[#1D6A53] rounded-md flex items-center gap-1.5 cursor-pointer shadow-xs"
+              disabled={importing || !canImport}
+              className="px-4 py-1.5 text-xs font-semibold text-white bg-[#258568] hover:bg-[#1D6A53] rounded-md flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-40"
             >
               {importing ? 'Импорт…' : 'Импортировать в банк'} <Check className="w-4 h-4" />
             </button>

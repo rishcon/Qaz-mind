@@ -55,6 +55,11 @@ def question(subject: str = "history_kz", **extra) -> dict:
     return body
 
 
+def imported(external_id: str, subject: str = "history_kz", **extra) -> dict:
+    """A row that satisfies the stricter import rules: an ID and a source."""
+    return question(subject, external_id=external_id, source_reference="Учебник, §1", **extra)
+
+
 async def test_admin_endpoints_need_a_staff_session(harness):
     assert (await harness.http.get("/api/v1/admin/overview")).status_code == 401
     # A student session is not a staff session.
@@ -171,11 +176,51 @@ async def test_question_is_validated_on_the_server(harness):
     assert bad_subject.status_code == 422
     missing_answer = await api_post(author, "/api/v1/admin/questions", question(correct_label="E"))
     assert missing_answer.status_code == 422
-    import_bad = await api_post(author, "/api/v1/admin/questions/import", {"rows": [question(), question(subject="nope_subject")]})
+    repeated = await api_post(
+        author,
+        "/api/v1/admin/questions",
+        question(options=[{"label": "A", "text_ru": "один"}, {"label": "B", "text_ru": "Один"}], correct_label="A"),
+    )
+    assert repeated.status_code == 422
+    import_bad = await api_post(
+        author,
+        "/api/v1/admin/questions/import",
+        {"rows": [imported("a-1"), imported("a-2", subject="nope_subject")]},
+    )
     assert import_bad.status_code == 422
     assert "Строка 2" in import_bad.json()["error"]["message"]
     listing = (await author.get("/api/v1/admin/questions")).json()
     assert listing["total"] == 0  # the whole file was rejected
+
+
+async def test_import_needs_id_and_source_and_dry_run_writes_nothing(harness):
+    author = await staff(harness, "author@qazmind.kz", ["CONTENT_MANAGER"])
+    url = "/api/v1/admin/questions/import"
+    rows = [
+        imported("ok-1"),
+        question(),  # no external_id, no source
+        imported("EXAMPLE-1"),
+        imported("ok-1", text_ru="Другой вопрос про то же самое?"),
+    ]
+    checked = await api_post(author, url + "?dry_run=true", {"rows": rows})
+    assert checked.status_code == 200
+    report = checked.json()
+    messages = {(e["row"], e["message"]) for e in report["errors"]}
+    assert (2, "не указан external_id") in messages
+    assert (2, "не указан источник (source)") in messages
+    assert any(r == 3 and "пример" in m for r, m in messages)
+    assert any(r == 4 and "повторяет строку 1" in m for r, m in messages)
+    assert report["valid"] == 1
+    assert (await author.get("/api/v1/admin/questions")).json()["total"] == 0
+
+    done = await api_post(author, url, {"rows": [imported("ok-1")]})
+    assert done.status_code == 201 and done.json() == {"created": 1}
+
+    again = await api_post(author, url + "?dry_run=true", {"rows": [imported("ok-1"), imported("ok-2")]})
+    report = again.json()
+    assert [(e["row"], "уже есть в банке" in e["message"]) for e in report["errors"]] == [(1, True)]
+    assert any(w["row"] == 1 and "уже есть в банке" in w["message"] for w in report["warnings"])
+    assert report["valid"] == 1
 
 
 async def test_disabling_a_student_ends_their_sessions_and_blocks_login(harness):
