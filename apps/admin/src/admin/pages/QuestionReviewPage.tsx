@@ -6,14 +6,17 @@ import { useAttention } from '../api/AttentionProvider';
 import { DIFFICULTY_LABELS, STATUS_LABELS } from '../api/labels';
 import { useStaff } from '../auth/StaffAuth';
 import { StatusBadge } from '../components/ui/StatusBadge';
-import { ActionResultNotice, type ActionResult } from '../components/ui/ConnectionNotice';
+import { ActionResultNotice, failureResult, type ActionResult } from '../components/ui/ConnectionNotice';
 import { ErrorBlock, fmtDate } from '../components/ui/PageState';
 
 interface QuestionReviewPageProps {
   onNavigate: (path: string) => void;
 }
 
-/** Review queue. The author of a question cannot approve or publish it: the server refuses, the buttons say why. */
+/**
+ * Review queue. The author of a question cannot approve or publish it (the platform owner can); the server refuses
+ * and the buttons say why. Questions can be ticked and approved, published or returned in one action.
+ */
 export const QuestionReviewPage: React.FC<QuestionReviewPageProps> = ({ onNavigate }) => {
   const { can, session } = useStaff();
   const attention = useAttention();
@@ -26,7 +29,11 @@ export const QuestionReviewPage: React.FC<QuestionReviewPageProps> = ({ onNaviga
   const subjects = useAdminData(() => adminApi.subjects(), []);
   const items = list.data?.items ?? [];
   const selected: Question | undefined = items.find((q) => q.id === selectedId) ?? items[0];
-  const own = selected?.author === session?.staff.email;
+  const isOwner = session?.staff.roles.includes('OWNER') ?? false;
+  const own = selected?.author === session?.staff.email && !isOwner;
+  const [ticked, setTicked] = useState<string[]>([]);
+  const [allFound, setAllFound] = useState(false);
+  const [busy, setBusy] = useState(false);
   const subjectName = (id: string) => subjects.data?.items.find((s) => s.id === id)?.title_ru ?? id;
 
   const act = async (action: WorkflowAction, text: string) => {
@@ -40,6 +47,39 @@ export const QuestionReviewPage: React.FC<QuestionReviewPageProps> = ({ onNaviga
     }
   };
 
+  const total = list.data?.total ?? 0;
+  const count = allFound ? total : ticked.length;
+  const allTicked = items.length > 0 && items.every((q) => ticked.includes(q.id));
+
+  const bulk = async (action: 'approve' | 'publish' | 'return', verb: string) => {
+    if (count === 0 || busy) return;
+    if (action === 'return' && !notes.trim()) {
+      setResult({ tone: 'error', text: 'Для возврата укажите замечания для автора.' });
+      return;
+    }
+    if (!window.confirm(`${verb}: ${count}? Вопросы не того статуса и свои вопросы автора (кроме владельца) будут пропущены.`)) return;
+    setBusy(true);
+    try {
+      const r = await adminApi.bulkQuestions({
+        action,
+        notes,
+        ...(allFound ? { filter: { status: queue } } : { ids: ticked }),
+      });
+      setResult({ tone: 'success', text: `Выполнено: ${r.done}.${r.skipped ? ` Пропущено: ${r.skipped}.` : ''}` });
+      setTicked([]);
+      setAllFound(false);
+      setNotes('');
+      setSelectedId('');
+      list.reload();
+      overview.reload();
+      attention.reload();
+    } catch (error) {
+      setResult(failureResult(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const counts = overview.data?.questions;
 
   return (
@@ -47,7 +87,7 @@ export const QuestionReviewPage: React.FC<QuestionReviewPageProps> = ({ onNaviga
       <div className="pb-2 border-b border-[#E2DED5]">
         <h1 className="text-xl font-bold text-[#171717]">Модерация вопросов</h1>
         <p className="text-xs text-[#78716C] mt-0.5">
-          Рецензент проверяет формулировку, ключ и пояснение. Автор не может утверждать и публиковать свои вопросы.
+          Рецензент проверяет формулировку, ключ и пояснение. Автор не может утверждать и публиковать свои вопросы; владелец платформы может всё.
         </p>
       </div>
 
@@ -77,6 +117,8 @@ export const QuestionReviewPage: React.FC<QuestionReviewPageProps> = ({ onNaviga
                 onClick={() => {
                   setQueue(value);
                   setSelectedId('');
+                  setTicked([]);
+                  setAllFound(false);
                 }}
                 className={`flex-1 px-2 py-1 rounded-md font-semibold cursor-pointer ${queue === value ? 'bg-white shadow-xs text-[#171717]' : 'text-[#78716C]'}`}
               >
@@ -84,6 +126,70 @@ export const QuestionReviewPage: React.FC<QuestionReviewPageProps> = ({ onNaviga
               </button>
             ))}
           </div>
+          {items.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#5C574F] px-1">
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={allFound || allTicked}
+                  onChange={() => {
+                    setAllFound(false);
+                    setTicked(allTicked || allFound ? [] : items.map((q) => q.id));
+                  }}
+                  className="w-3.5 h-3.5 cursor-pointer"
+                />
+                Выбрать все
+              </label>
+              {count > 0 && <span className="font-semibold text-[#171717]">Выбрано: {count}</span>}
+              {!allFound && allTicked && total > items.length && (
+                <button onClick={() => setAllFound(true)} className="underline text-[#E84D2B] cursor-pointer">
+                  Все {total} в очереди
+                </button>
+              )}
+            </div>
+          )}
+          {count > 0 && (
+            <div className="space-y-2 p-2.5 rounded-lg border border-[#FFD9CF] bg-[#FFF7F5]">
+              {queue === 'in_review' && (
+                <textarea
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Замечания (нужны, чтобы вернуть выбранные)"
+                  className="w-full text-xs p-2 bg-white border border-[#E2DED5] rounded-md"
+                />
+              )}
+              <div className="flex flex-wrap gap-2">
+                {queue === 'in_review' && can('content.review') && (
+                  <>
+                    <button
+                      disabled={busy}
+                      onClick={() => void bulk('approve', 'Утвердить')}
+                      className="px-3 py-1.5 text-xs font-semibold text-white bg-[#258568] hover:bg-[#1D6A53] rounded-md cursor-pointer disabled:opacity-40"
+                    >
+                      Утвердить выбранные
+                    </button>
+                    <button
+                      disabled={busy || !notes.trim()}
+                      onClick={() => void bulk('return', 'Вернуть автору')}
+                      className="px-3 py-1.5 text-xs font-medium text-[#C94A43] bg-white border border-[#FCA5A5] rounded-md cursor-pointer disabled:opacity-40"
+                    >
+                      Вернуть
+                    </button>
+                  </>
+                )}
+                {queue === 'approved' && can('content.publish') && (
+                  <button
+                    disabled={busy}
+                    onClick={() => void bulk('publish', 'Опубликовать')}
+                    className="px-3 py-1.5 text-xs font-semibold text-white bg-[#FF5A36] hover:bg-[#E84D2B] rounded-md cursor-pointer disabled:opacity-40"
+                  >
+                    Опубликовать выбранные
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
           <div className="space-y-1.5 max-h-[560px] overflow-y-auto pr-1">
             {items.length === 0 ? (
               <div className="p-6 text-center text-xs text-[#78716C]">{list.loading ? 'Загрузка…' : 'Очередь пуста.'}</div>
@@ -97,7 +203,20 @@ export const QuestionReviewPage: React.FC<QuestionReviewPageProps> = ({ onNaviga
                   }`}
                 >
                   <div className="flex items-center justify-between text-[10px] text-[#A8A29E]">
-                    <span>{subjectName(q.subject_id)}</span>
+                    <span className="flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={allFound || ticked.includes(q.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={() => {
+                          setAllFound(false);
+                          setTicked(ticked.includes(q.id) ? ticked.filter((id) => id !== q.id) : [...ticked, q.id]);
+                        }}
+                        className="w-3.5 h-3.5 cursor-pointer"
+                        aria-label="Выбрать вопрос"
+                      />
+                      {subjectName(q.subject_id)}
+                    </span>
                     <span>{fmtDate(q.updated_at)}</span>
                   </div>
                   <p className="text-xs font-medium text-[#171717] line-clamp-2 mt-1">{q.text_ru}</p>
@@ -178,7 +297,7 @@ export const QuestionReviewPage: React.FC<QuestionReviewPageProps> = ({ onNaviga
               )}
 
               <div className="pt-4 border-t border-[#E2DED5] flex flex-wrap items-center justify-end gap-2.5">
-                {own && <span className="text-[11px] text-[#9A6715] mr-auto">Это ваш вопрос: утвердить и опубликовать его может только другой сотрудник.</span>}
+                {own && <span className="text-[11px] text-[#9A6715] mr-auto">Это ваш вопрос: утвердить и опубликовать его может только другой сотрудник или владелец платформы.</span>}
                 {selected.status === 'in_review' && can('content.review') && (
                   <>
                     <button

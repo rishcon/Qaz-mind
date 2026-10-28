@@ -316,3 +316,34 @@ async def test_bulk_submit_and_delete_touch_only_drafts(harness):
     assert (await api_post(author, base + "/bulk", {"action": "delete", "ids": [drafts[0]["id"]]})).json() == {"done": 1, "skipped": 0}
     assert (await api_post(author, base + "/bulk", {"action": "delete", "filter": {"status": "draft"}})).json() == {"done": 1, "skipped": 0}
     assert (await author.get(base)).json()["total"] == 4
+
+
+async def test_owner_can_approve_and_publish_in_bulk_others_cannot_their_own(harness):
+    base = "/api/v1/admin/questions"
+    manager = await staff(harness, "manager@qazmind.kz", ["CONTENT_MANAGER", "CONTENT_REVIEWER"])
+    rows = [imported(f"o-{i}", text_ru=f"Вопрос {i} для проверки владельца?") for i in range(3)]
+    assert (await api_post(manager, base + "/import", {"rows": rows})).status_code == 201
+    assert (await api_post(manager, base + "/bulk", {"action": "submit", "filter": {"status": "draft"}})).json()["done"] == 3
+
+    # The author with review rights is skipped on their own questions; nothing changes.
+    own = await api_post(manager, base + "/bulk", {"action": "approve", "filter": {"status": "in_review"}})
+    assert own.json() == {"done": 0, "skipped": 3}
+
+    owner = await staff(harness, "owner2@qazmind.kz", ["OWNER"])
+    approved = await api_post(owner, base + "/bulk", {"action": "approve", "filter": {"status": "in_review"}})
+    assert approved.json() == {"done": 3, "skipped": 0}
+    published = await api_post(owner, base + "/bulk", {"action": "publish", "filter": {"status": "approved"}})
+    assert published.json() == {"done": 3, "skipped": 0}
+    assert (await owner.get(base + "?status=published")).json()["total"] == 3
+
+    # The owner may also approve what the owner wrote.
+    mine = await api_post(owner, base + "/import", {"rows": [imported("o-own", text_ru="Вопрос владельца для самопроверки?")]})
+    assert mine.status_code == 201
+    qid = (await owner.get(base + "?status=draft")).json()["items"][0]["id"]
+    assert (await api_post(owner, f"{base}/{qid}/transition", {"action": "submit"})).status_code == 200
+    assert (await api_post(owner, f"{base}/{qid}/transition", {"action": "approve"})).status_code == 200
+
+    # Returning needs notes; a role without the permission is refused.
+    assert (await api_post(owner, base + "/bulk", {"action": "return", "ids": [qid]})).status_code == 422
+    author_only = await staff(harness, "writer@qazmind.kz", ["CONTENT_MANAGER"])
+    assert (await api_post(author_only, base + "/bulk", {"action": "approve", "ids": [qid]})).status_code == 403

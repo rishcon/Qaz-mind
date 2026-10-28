@@ -33,6 +33,22 @@ TRANSITIONS = {
 REVIEW_ACTIONS = frozenset({"approve", "publish"})
 
 
+def _blocked_as_author(ctx: StaffContext, question: Question, action: str) -> bool:
+    """The author cannot approve or publish their own question. The platform owner can do everything."""
+    return action in REVIEW_ACTIONS and question.author_staff_id == ctx.staff.id and "OWNER" not in ctx.roles
+
+
+def _move(ctx: StaffContext, question: Question, action: str, notes: str) -> None:
+    now = utcnow()
+    question.status = TRANSITIONS[action][1]
+    if action in ("approve", "return"):
+        question.reviewer_staff_id = ctx.staff.id
+        question.review_notes = notes
+    if action == "publish":
+        question.published_at = now
+    question.updated_at = now
+
+
 class OptionIn(BaseModel):
     label: Literal["A", "B", "C", "D", "E"]
     text_ru: str = Field(min_length=1, max_length=1000)
@@ -230,17 +246,11 @@ async def transition(
     question = await _question(db, question_id)
     if question.status != required:
         raise AppError(409, "WORKFLOW_RULE", f"Действие возможно только из статуса «{required}», сейчас «{question.status}»")
-    if body.action in REVIEW_ACTIONS and question.author_staff_id == ctx.staff.id:
+    if _blocked_as_author(ctx, question, body.action):
         raise AppError(409, "OWN_MATERIAL", "Автор не может утверждать или публиковать свой вопрос")
     if body.action == "return" and not body.notes.strip():
         raise AppError(422, "NOTES_REQUIRED", "Укажите замечания для автора")
-    question.status = target
-    if body.action in ("approve", "return"):
-        question.reviewer_staff_id = ctx.staff.id
-        question.review_notes = body.notes.strip()
-    if body.action == "publish":
-        question.published_at = utcnow()
-    question.updated_at = utcnow()
+    _move(ctx, question, body.action, body.notes.strip())
     await write_audit(db, ctx, f"question.{body.action}", meta, "question", str(question.id),
                       details={"status": target, "notes": body.notes.strip()})
     await db.commit()
@@ -346,7 +356,8 @@ class BulkFilter(BaseModel):
 class BulkIn(BaseModel):
     """Either an explicit list of questions or the filter the person is looking at ("all questions found")."""
 
-    action: Literal["submit", "delete"]
+    action: Literal["submit", "return", "approve", "publish", "archive", "delete"]
+    notes: str = Field(default="", max_length=2000)
     ids: list[uuid.UUID] | None = Field(default=None, max_length=5000)
     filter: BulkFilter | None = None
 
@@ -355,11 +366,13 @@ class BulkIn(BaseModel):
 async def bulk(
     body: BulkIn,
     meta: MetaDep,
-    ctx: Annotated[StaffContext, Depends(require("content.edit"))],
+    ctx: StaffDep,
     db=Depends(get_db),
 ) -> dict:
-    """Sends drafts to review or deletes drafts. Questions in any other status are skipped and counted, never touched:
-    a question that was reviewed or published is archived, not deleted."""
+    """Applies one workflow action to many questions. Each question follows the same rules as a single one: a question
+    in the wrong status, or one the person may not approve (their own, unless they are the owner), is skipped and
+    counted, never touched. Delete is only for drafts: a question that was reviewed or published is archived."""
+    ctx.require("content.edit" if body.action == "delete" else TRANSITIONS[body.action][2])
     if (body.ids is None) == (body.filter is None):
         raise AppError(422, "BULK_SCOPE", "Укажите либо список вопросов, либо фильтр")
     if body.ids is not None:
@@ -368,21 +381,23 @@ async def bulk(
         query = select(Question).where(Question.id.in_(body.ids))
     else:
         query = _filtered(body.filter.subject_id, body.filter.status, body.filter.search)
+    if body.action == "return" and not body.notes.strip():
+        raise AppError(422, "NOTES_REQUIRED", "Укажите замечания для автора")
+
     selected = (await db.execute(query)).scalars().all()
-    drafts = [q for q in selected if q.status == "draft"]
-    now = utcnow()
-    if body.action == "submit":
-        for q in drafts:
-            q.status = "in_review"
-            q.updated_at = now
-    else:
-        ids = [q.id for q in drafts]
+    required = "draft" if body.action == "delete" else TRANSITIONS[body.action][0]
+    eligible = [q for q in selected if q.status == required and not _blocked_as_author(ctx, q, body.action)]
+    if body.action == "delete":
+        ids = [q.id for q in eligible]
         for start in range(0, len(ids), 1000):
             await db.execute(delete(Question).where(Question.id.in_(ids[start : start + 1000]), Question.status == "draft"))
-    done = len(drafts)
+    else:
+        for q in eligible:
+            _move(ctx, q, body.action, body.notes.strip())
+    done = len(eligible)
     await write_audit(
         db, ctx, f"question.bulk_{body.action}", meta, "question", None,
-        details={"done": done, "skipped": len(selected) - done, "ids": [str(q.id) for q in drafts[:200]]},
+        details={"done": done, "skipped": len(selected) - done, "notes": body.notes.strip(), "ids": [str(q.id) for q in eligible[:200]]},
     )
     await db.commit()
     return {"done": done, "skipped": len(selected) - done}

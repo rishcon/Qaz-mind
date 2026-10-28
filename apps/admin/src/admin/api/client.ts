@@ -321,9 +321,10 @@ export const adminApi = {
   updateQuestion: (id: string, body: QuestionBody) => put<{ id: string; version: number }>(`/admin/questions/${id}`, body),
   questionTransition: (id: string, action: WorkflowAction, notes = '') =>
     post<{ status: string }>(`/admin/questions/${id}/transition`, { action, notes }),
-  /** Sends drafts to review or deletes drafts. Either a list of ids or the filter ("all found"). Other statuses are skipped. */
+  /** Applies one workflow action to many questions: a list of ids or the filter ("all found"). Questions the action does not fit are skipped and counted. */
   bulkQuestions: (body: {
-    action: 'submit' | 'delete';
+    action: WorkflowAction | 'delete';
+    notes?: string;
     ids?: string[];
     filter?: { subject_id?: string; status?: string; search?: string };
   }) => post<{ done: number; skipped: number }>('/admin/questions/bulk', body),
