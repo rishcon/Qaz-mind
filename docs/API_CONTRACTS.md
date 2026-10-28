@@ -89,6 +89,12 @@
 | GET | `/api/v1/lessons/{slug}` | опубликованная версия урока; черновик даёт 404 |
 | PUT | `/api/v1/me/lessons/{slug}/progress` | `{last_step, completed}`; завершение только на последнем шаге |
 | GET | `/api/v1/me/progress` | список прогресса пользователя |
+| GET | `/api/v1/practice/subjects` | предметы, по которым есть опубликованные вопросы, и их число |
+| POST | `/api/v1/practice/sessions` | `{subject_id, count 1–20}`; сервер выбирает вопросы (сначала не виденные, затем с ошибками); 409 `NO_QUESTIONS`, если нечего давать; ключ и пояснение в ответ не входят |
+| GET | `/api/v1/practice/sessions/{id}` | возобновление: те же вопросы и уже данные ответы с разбором; чужая сессия даёт 404 |
+| POST | `/api/v1/practice/sessions/{id}/answers` | `{question_id, selected_label}`; сервер проверяет и только после сохранения возвращает `correct_label` и пояснение; повтор даёт 409 `ALREADY_ANSWERED` |
+| POST | `/api/v1/practice/sessions/{id}/finish` | завершает сессию, возвращает итог |
+| GET | `/api/v1/practice/stats` | `{answered, correct}` по сохранённым ответам пользователя |
 
 Все эти маршруты требуют сессии. Контент публикуется CLI, а не API: см. `apps/api/app/content/cli.py`.
 

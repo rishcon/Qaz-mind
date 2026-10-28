@@ -3,7 +3,7 @@ import { Language } from './types';
 import { DashboardView, MistakeItem, StudentProfile } from './types/dashboard';
 import { UserAccount } from './types/auth';
 import { useAuth } from './auth/AuthProvider';
-import { authApi, learningApi, MeResponse, OnboardingPayload, profileApi, ProfilePatch } from './api/endpoints';
+import { authApi, learningApi, MeResponse, OnboardingPayload, practiceApi, profileApi, ProfilePatch } from './api/endpoints';
 import { emptyStudentProfile, toProfilePatch, toStudentProfile } from './api/mappers';
 import { UnavailablePage } from './components/common/UnavailablePage';
 import { ResetPasswordPage } from './components/auth/ResetPasswordPage';
@@ -39,9 +39,10 @@ import { SettingsView } from './components/dashboard/SettingsView';
 // Focus Mode (Layout C)
 import { FocusLessonReader } from './components/focus/FocusLessonReader';
 import { FocusMistakeReview } from './components/focus/FocusMistakeReview';
+import { FocusPractice } from './components/focus/FocusPractice';
 
 /** Screens that are not connected to the server yet. They say so and show no data. */
-type UnavailableScreen = 'schools' | 'schools_apply' | 'school' | 'teacher' | 'practice' | 'exam' | 'not_found';
+type UnavailableScreen = 'schools' | 'schools_apply' | 'school' | 'teacher' | 'exam' | 'not_found';
 
 const UNAVAILABLE_COPY: Record<
   UnavailableScreen,
@@ -72,12 +73,6 @@ const UNAVAILABLE_COPY: Record<
     description: 'Кабинеты школ и учителей подключаются на следующих этапах. Здесь пока нет реальных данных.',
     toDashboard: false,
   },
-  practice: {
-    label: 'Практика',
-    title: 'Практика пока недоступна',
-    description: 'Практика откроется, когда в банке появятся опубликованные задания. Сессия не запускается.',
-    toDashboard: true,
-  },
   exam: {
     label: 'Пробное ЕНТ',
     title: 'Пробный экзамен пока недоступен',
@@ -100,7 +95,6 @@ const UNAVAILABLE_ROUTES: Partial<Record<AppRoute, UnavailableScreen>> = {
   school: 'school',
   teacher: 'teacher',
   not_found: 'not_found',
-  focus_practice: 'practice',
   focus_exam: 'exam',
   focus_exam_results: 'exam',
 };
@@ -129,6 +123,12 @@ type AppRoute =
 const lessonFromPath = (): string => {
   const [, section = '', , slug = ''] = window.location.pathname.split('/');
   return section === 'learn' ? slug : '';
+};
+
+/** Session id from /practice/session/<id>, so a reload returns to the same run. */
+const practiceSessionFromPath = (): string => {
+  const [, section = '', kind = '', id = ''] = window.location.pathname.split('/');
+  return section === 'practice' && kind === 'session' ? id : '';
 };
 
 export default function App() {
@@ -194,6 +194,9 @@ export default function App() {
 
   // Active Focus Mode parameters
   const [activeLessonSlug, setActiveLessonSlug] = useState<string>(lessonFromPath);
+  const [activePracticeSessionId, setActivePracticeSessionId] = useState<string>(practiceSessionFromPath);
+  const [practiceSubjectId, setPracticeSubjectId] = useState<string>('');
+  const [practicedCount, setPracticedCount] = useState(0);
   const [activeMistakeReviewItem, setActiveMistakeReviewItem] = useState<MistakeItem | null>(null);
 
   // URL synchronization helper
@@ -214,6 +217,7 @@ export default function App() {
     const handlePopState = () => {
       setCurrentRoute(getInitialRoute());
       setActiveLessonSlug(lessonFromPath());
+      setActivePracticeSessionId(practiceSessionFromPath());
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -226,6 +230,15 @@ export default function App() {
       .then((records) => setCompletedLessonIds(records.filter((r) => r.state === 'completed').map((r) => r.lesson_slug)))
       .catch(() => setCompletedLessonIds([]));
   }, [auth.user?.id]);
+
+  // The number of answered practice questions comes from the server; it is refreshed when the student returns.
+  useEffect(() => {
+    if (!auth.user || currentRoute !== 'app') return;
+    practiceApi
+      .stats()
+      .then((stats) => setPracticedCount(stats.answered))
+      .catch(() => setPracticedCount(0));
+  }, [auth.user?.id, currentRoute, dashboardView]);
 
   // Auth gating: personal study and focus screens need a session; study needs a completed onboarding.
   const sessionRoutes: AppRoute[] = [
@@ -313,6 +326,12 @@ export default function App() {
     }
     navigateTo('app', '/app');
     setDashboardView('today');
+  };
+
+  // Handler: a practice session was created on the server; open it in Focus Mode.
+  const handlePracticeStarted = (sessionId: string) => {
+    setActivePracticeSessionId(sessionId);
+    navigateTo('focus_practice', `/practice/session/${sessionId}`);
   };
 
   // Handler: Review Mistake in Focus Mode (Layout C)
@@ -439,6 +458,29 @@ export default function App() {
     );
   }
 
+  if (currentRoute === 'focus_practice') {
+    return (
+      <FocusPractice
+        sessionId={activePracticeSessionId}
+        currentLang={currentLang}
+        onRestart={(subjectId) => {
+          practiceApi
+            .start(subjectId, 10)
+            .then((session) => handlePracticeStarted(session.id))
+            .catch(() => {
+              setPracticeSubjectId(subjectId);
+              navigateTo('app', '/app');
+              setDashboardView('practice');
+            });
+        }}
+        onExit={() => {
+          navigateTo('app', '/app');
+          setDashboardView('practice');
+        }}
+      />
+    );
+  }
+
   if (currentRoute === 'focus_mistake_review' && activeMistakeReviewItem) {
     return (
       <FocusMistakeReview
@@ -485,11 +527,21 @@ export default function App() {
             currentLang={currentLang}
             profile={profile}
             onNavigateToLesson={handleStartLesson}
-            onNavigateToPractice={() => setDashboardView('practice')}
+            onNavigateToPractice={(subjectId) => {
+              setPracticeSubjectId(subjectId);
+              setDashboardView('practice');
+            }}
           />
         )}
 
-        {dashboardView === 'practice' && <PracticeView currentLang={currentLang} onNavigate={setDashboardView} />}
+        {dashboardView === 'practice' && (
+          <PracticeView
+            currentLang={currentLang}
+            initialSubjectId={practiceSubjectId}
+            onNavigate={setDashboardView}
+            onStarted={handlePracticeStarted}
+          />
+        )}
 
         {dashboardView === 'mock_exam' && <MockExamView currentLang={currentLang} onNavigate={setDashboardView} />}
 
@@ -508,7 +560,7 @@ export default function App() {
             profile={profile}
             completedLessonIds={completedLessonIds}
             examHistory={[]}
-            practicedCount={0}
+            practicedCount={practicedCount}
             onStartLearning={() => setDashboardView('subjects')}
           />
         )}

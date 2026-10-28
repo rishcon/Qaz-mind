@@ -165,3 +165,61 @@ export const learningApi = {
     }),
   myProgress: () => apiRequest<ApiProgressRecord[]>('GET', '/me/progress'),
 };
+
+// ----- practice --------------------------------------------------------------------------------
+
+export type OptionLabel = 'A' | 'B' | 'C' | 'D' | 'E';
+
+export interface ApiPracticeSubject {
+  subject_id: string;
+  /** Published questions available for practice. */
+  available: number;
+}
+
+export interface ApiPracticeOption {
+  label: OptionLabel;
+  text_ru: string;
+  text_kz: string;
+}
+
+export interface ApiPracticeQuestion {
+  id: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  text_ru: string;
+  text_kz: string;
+  options: ApiPracticeOption[];
+}
+
+/** Present only for a question that was already answered: the server reveals the key after the answer is saved. */
+export interface ApiPracticeReview {
+  selected_label: OptionLabel;
+  correct_label: OptionLabel;
+  is_correct: boolean;
+  explanation_ru: string;
+  explanation_kz: string;
+}
+
+export interface ApiPracticeSession {
+  id: string;
+  subject_id: string;
+  created_at: string;
+  finished_at: string | null;
+  total: number;
+  answered: number;
+  correct: number;
+  items: { question: ApiPracticeQuestion; review: ApiPracticeReview | null }[];
+}
+
+export const practiceApi = {
+  subjects: () => apiRequest<ApiPracticeSubject[]>('GET', '/practice/subjects'),
+  stats: () => apiRequest<{ answered: number; correct: number }>('GET', '/practice/stats'),
+  start: (subjectId: string, count: number) =>
+    apiRequest<ApiPracticeSession>('POST', '/practice/sessions', { subject_id: subjectId, count }),
+  session: (id: string) => apiRequest<ApiPracticeSession>('GET', `/practice/sessions/${encodeURIComponent(id)}`),
+  answer: (id: string, questionId: string, label: OptionLabel) =>
+    apiRequest<ApiPracticeReview>('POST', `/practice/sessions/${encodeURIComponent(id)}/answers`, {
+      question_id: questionId,
+      selected_label: label,
+    }),
+  finish: (id: string) => apiRequest<ApiPracticeSession>('POST', `/practice/sessions/${encodeURIComponent(id)}/finish`),
+};

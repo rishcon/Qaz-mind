@@ -4,6 +4,7 @@ from app.models.admin import AuditEvent, StaffInvitation, StaffMember, StaffRole
 from app.models.auth import AuthSession, AuthToken
 from app.models.content import CurriculumTopic, Lesson, LessonVersion, Subject
 from app.models.learning import LessonProgress
+from app.models.practice import PracticeAnswer, PracticeSession
 from app.models.profile import ProfilePair, StudentProfile
 from app.models.question import Question
 from app.models.user import User
@@ -16,6 +17,8 @@ __all__ = [
     "Lesson",
     "LessonProgress",
     "LessonVersion",
+    "PracticeAnswer",
+    "PracticeSession",
     "ProfilePair",
     "Question",
     "StaffInvitation",
