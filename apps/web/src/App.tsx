@@ -160,7 +160,10 @@ export default function App() {
     if (path.startsWith('/exam/results')) return 'focus_exam_results';
     if (path.startsWith('/review')) return 'focus_mistake_review';
 
-    return 'landing';
+    if (path === '/home') return 'landing';
+
+    // The entry point of the site is the login page.
+    return 'login';
   };
 
   const [currentRoute, setCurrentRoute] = useState<AppRoute>(getInitialRoute);
@@ -211,7 +214,7 @@ export default function App() {
     setCurrentRoute(route);
     const targetUrl =
       pathUrl ||
-      (route === 'landing' ? '/' : route === 'schools_apply' ? '/schools/apply' : `/${route}`);
+      (route === 'landing' ? '/home' : route === 'schools_apply' ? '/schools/apply' : `/${route}`);
 
     if (window.location.pathname !== targetUrl) {
       window.history.pushState({}, '', targetUrl);
@@ -296,13 +299,6 @@ export default function App() {
       navigateTo('onboarding', '/onboarding');
     }
   }, [currentRoute, auth.status, auth.user, onboardingCompleted]);
-
-  // The entry point is the login page: an anonymous visitor on "/" (or after logout / an expired session) lands there.
-  useEffect(() => {
-    if (auth.status === 'loading' || auth.user || currentRoute !== 'landing') return;
-    setCurrentRoute('login');
-    window.history.replaceState({}, '', '/login');
-  }, [currentRoute, auth.status, auth.user]);
 
   // A signed-in student has no use for the public pages: the landing and the login/register forms lead to the dashboard.
   useEffect(() => {
@@ -420,7 +416,7 @@ export default function App() {
         currentLang={currentLang}
         onRegister={handleRegister}
         onNavigateLogin={() => navigateTo('login', '/login')}
-        onNavigateHome={() => navigateTo('login', '/login')}
+        onNavigateHome={() => navigateTo('landing', '/home')}
         onNavigateSchoolApply={() => navigateTo('schools_apply', '/schools/apply')}
       />
     );
@@ -433,7 +429,7 @@ export default function App() {
         onLogin={handleLogin}
         onNavigateRegister={() => navigateTo('register', '/register')}
         onNavigateForgotPassword={() => navigateTo('forgot-password', '/forgot-password')}
-        onNavigateHome={() => navigateTo('login', '/login')}
+        onNavigateHome={() => navigateTo('landing', '/home')}
       />
     );
   }
@@ -449,7 +445,7 @@ export default function App() {
           await authApi.resendVerification(email);
         }}
         onChangeEmail={() => navigateTo('register', '/register')}
-        onNavigateHome={() => navigateTo('login', '/login')}
+        onNavigateHome={() => navigateTo('landing', '/home')}
       />
     );
   }
@@ -462,7 +458,7 @@ export default function App() {
           await authApi.forgotPassword(email);
         }}
         onNavigateLogin={() => navigateTo('login', '/login')}
-        onNavigateHome={() => navigateTo('login', '/login')}
+        onNavigateHome={() => navigateTo('landing', '/home')}
       />
     );
   }
@@ -477,7 +473,7 @@ export default function App() {
         }}
         onNavigateLogin={() => navigateTo('login', '/login')}
         onNavigateForgotPassword={() => navigateTo('forgot-password', '/forgot-password')}
-        onNavigateHome={() => navigateTo('login', '/login')}
+        onNavigateHome={() => navigateTo('landing', '/home')}
       />
     );
   }
