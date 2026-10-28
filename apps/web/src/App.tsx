@@ -142,7 +142,7 @@ export default function App() {
   const getInitialRoute = (): AppRoute => {
     const path = window.location.pathname;
 
-    if (path === '/schools') return 'schools';
+    if (path === '/schools') return 'schools_apply';
     if (path === '/schools/apply') return 'schools_apply';
     if (path === '/invite') return 'invite';
     if (path.startsWith('/school')) return 'school';
@@ -499,6 +499,7 @@ export default function App() {
   if (currentRoute === 'login') {
     return (
       <LoginPage
+        onNavigateSchoolApply={() => navigateTo('schools_apply', '/schools/apply')}
         currentLang={currentLang}
         onLogin={handleLogin}
         onNavigateRegister={() => navigateTo('register', '/register')}
@@ -756,6 +757,7 @@ export default function App() {
         onLanguageChange={setCurrentLang}
         onOpenLogin={() => navigateTo('login', '/login')}
         onOpenRegister={() => navigateTo('register', '/register')}
+        onOpenSchools={() => navigateTo('schools_apply', '/schools/apply')}
       />
 
       <main>

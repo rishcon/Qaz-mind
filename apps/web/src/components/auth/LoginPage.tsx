@@ -8,6 +8,7 @@ interface LoginPageProps {
   currentLang: Language;
   onLogin: (email: string, password: string) => Promise<void>;
   onNavigateRegister: () => void;
+  onNavigateSchoolApply?: () => void;
   onNavigateForgotPassword: () => void;
   onNavigateHome: () => void;
 }
@@ -16,6 +17,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   currentLang,
   onLogin,
   onNavigateRegister,
+  onNavigateSchoolApply,
   onNavigateForgotPassword,
   onNavigateHome,
 }) => {
@@ -196,6 +198,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 Зарегистрируйтесь бесплатно
               </button>
             </p>
+            {onNavigateSchoolApply && (
+              <p className="text-xs text-[#74736F] mt-2">
+                Представляете школу?{' '}
+                <button
+                  type="button"
+                  onClick={onNavigateSchoolApply}
+                  className="text-[#171717] font-bold hover:text-[#FF5A36] underline cursor-pointer"
+                >
+                  Подайте заявку на подключение
+                </button>
+              </p>
+            )}
           </div>
         </div>
       </main>

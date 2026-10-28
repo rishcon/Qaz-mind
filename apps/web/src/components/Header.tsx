@@ -8,6 +8,7 @@ interface HeaderProps {
   onLanguageChange: (lang: Language) => void;
   onOpenLogin: () => void;
   onOpenRegister: () => void;
+  onOpenSchools?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -15,6 +16,7 @@ export const Header: React.FC<HeaderProps> = ({
   onLanguageChange,
   onOpenLogin,
   onOpenRegister,
+  onOpenSchools,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -92,6 +94,16 @@ export const Header: React.FC<HeaderProps> = ({
               KZ
             </button>
           </div>
+
+          {onOpenSchools && (
+            <button
+              type="button"
+              onClick={onOpenSchools}
+              className="text-sm font-medium text-[#171717] hover:text-[#FF5A36] transition-colors cursor-pointer"
+            >
+              {currentLang === 'kz' ? 'Мектептерге' : 'Для школ'}
+            </button>
+          )}
 
           <button
             type="button"
