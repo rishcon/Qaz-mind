@@ -11,6 +11,7 @@ export interface LocaleContent {
     title: string;
     lead: string;
     today: string;
+    format: string;
     cta: string;
     secondary: string;
   };
@@ -42,6 +43,7 @@ export const locales: Record<Language, LocaleContent> = {
       title: 'ЕНТ — по одной\nтеме за раз.',
       lead: 'QazMind — платформа подготовки к ЕНТ: короткие уроки по темам, задания с разбором и личный кабинет, где виден ваш путь.',
       today: 'Сегодня',
+      format: '120 заданий · 240 минут · до 140 баллов',
       cta: 'Начать подготовку',
       secondary: 'Как это работает',
     },
@@ -75,6 +77,7 @@ export const locales: Record<Language, LocaleContent> = {
       title: 'ҰБТ — бір\nтақырыптан.',
       lead: 'QazMind — ҰБТ-ға дайындық платформасы: тақырыптар бойынша қысқа сабақтар, талдауы бар тапсырмалар және жолыңыз көрінетін жеке кабинет.',
       today: 'Бүгін',
+      format: '120 тапсырма · 240 минут · 140 балға дейін',
       cta: 'Дайындықты бастау',
       secondary: 'Қалай жұмыс істейді',
     },

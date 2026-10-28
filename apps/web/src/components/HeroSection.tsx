@@ -3,6 +3,7 @@ import { ArrowRight } from 'lucide-react';
 import { Language } from '../types';
 import { locales } from '../content/locales';
 import { ENT_SUBJECTS } from '../content/ent';
+import { Boxes } from './ui/background-boxes';
 import './landing/landing.css';
 
 interface HeroSectionProps {
@@ -24,8 +25,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ currentLang, onStart, 
   const lines = t.title.split('\n');
 
   return (
-    <section className="relative min-h-screen flex flex-col justify-between pt-32 md:pt-40 overflow-hidden border-b border-[#D9D5CB]">
-      <div className="max-w-7xl w-full mx-auto px-6 md:px-10">
+    <section className="relative min-h-screen flex flex-col justify-between pt-32 md:pt-40 overflow-hidden border-b border-[#D9D5CB] bg-white">
+      <Boxes />
+      <div className="absolute inset-0 z-10 bg-white [mask-image:radial-gradient(transparent_45%,white_95%)] pointer-events-none" />
+      <div className="relative z-20 max-w-7xl w-full mx-auto px-6 md:px-10 pointer-events-none">
         <div className="qm-fade flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-xs font-semibold tracking-wider">
           <span className="text-[#FF5A36]">{t.label}</span>
           <span className="w-8 h-px bg-[#D9D5CB]" />
@@ -50,10 +53,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ currentLang, onStart, 
         </h1>
 
         <div className="mt-10 md:mt-14 flex flex-col md:flex-row md:items-end md:justify-between gap-8">
-          <p className="qm-fade max-w-lg text-lg text-[#171717]/80 leading-relaxed" style={{ ['--d' as string]: '450ms' }}>
-            {t.lead}
-          </p>
-          <div className="qm-fade flex flex-col sm:flex-row sm:items-center gap-5" style={{ ['--d' as string]: '600ms' }}>
+          <div className="qm-fade max-w-lg" style={{ ['--d' as string]: '450ms' }}>
+            <p className="text-lg text-[#171717]/80 leading-relaxed">{t.lead}</p>
+            <p className="mt-4 font-mono text-xs font-semibold tracking-wide text-[#FF5A36]">{t.format}</p>
+          </div>
+          <div className="qm-fade pointer-events-auto flex flex-col sm:flex-row sm:items-center gap-5" style={{ ['--d' as string]: '600ms' }}>
             <button
               type="button"
               onClick={onStart}
@@ -73,7 +77,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ currentLang, onStart, 
         </div>
       </div>
 
-      <div aria-hidden="true" className="mt-16 md:mt-20 pb-8 overflow-hidden select-none">
+      <div aria-hidden="true" className="relative z-20 pointer-events-none mt-16 md:mt-20 pb-8 overflow-hidden select-none">
         <div className="qm-marquee">
           {[0, 1].map((copy) => (
             <div key={copy} className="flex items-center shrink-0">
