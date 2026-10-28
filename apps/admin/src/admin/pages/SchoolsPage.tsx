@@ -24,7 +24,7 @@ const TYPE_LABELS: Record<string, string> = {
 
 type View = 'applications' | 'organizations';
 
-export const SchoolsPage: React.FC<SchoolsPageProps> = () => {
+export const SchoolsPage: React.FC<SchoolsPageProps> = ({ onNavigate }) => {
   const { can } = useStaff();
   const [view, setView] = useState<View>('applications');
   const [search, setSearch] = useState('');
@@ -165,7 +165,7 @@ export const SchoolsPage: React.FC<SchoolsPageProps> = () => {
       header: 'Организация',
       cell: (o) => (
         <div>
-          <div className="font-semibold text-xs text-[#171717]">{o.name}</div>
+          <div className="font-semibold text-xs text-[#171717] hover:text-[#FF5A36]">{o.name}</div>
           <div className="text-[11px] text-[#78716C]">
             {TYPE_LABELS[o.type] ?? o.type} · {o.city}
           </div>
@@ -201,7 +201,7 @@ export const SchoolsPage: React.FC<SchoolsPageProps> = () => {
       cell: (o) =>
         can('finance.manage') ? (
           <button
-            onClick={() => setLicenseFor(o)}
+            onClick={(e) => { e.stopPropagation(); setLicenseFor(o); }}
             className="px-2.5 py-1 text-xs text-[#171717] bg-white border border-[#E2DED5] rounded hover:bg-[#F5F3EE] cursor-pointer"
           >
             Выдать лицензию
@@ -287,6 +287,7 @@ export const SchoolsPage: React.FC<SchoolsPageProps> = () => {
           onSearchChange={setSearch}
           filters={statusFilters}
           emptyMessage={applications.loading ? 'Загрузка…' : 'Заявок нет'}
+          onRowClick={(a) => a.organization_id && onNavigate(`/admin/schools/${a.organization_id}`)}
         />
       ) : (
         <DataTable
@@ -297,6 +298,7 @@ export const SchoolsPage: React.FC<SchoolsPageProps> = () => {
           searchValue={search}
           onSearchChange={setSearch}
           emptyMessage={organizations.loading ? 'Загрузка…' : 'Организаций пока нет'}
+          onRowClick={(o) => onNavigate(`/admin/schools/${o.id}`)}
         />
       )}
 

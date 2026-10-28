@@ -31,9 +31,7 @@ import { ForbiddenBlock, SectionNotConnected } from './admin/components/ui/PageS
 
 /** Sections whose server side does not exist yet. They are labelled; nothing on them is loaded or saved. */
 const NOT_CONNECTED: Array<{ prefix: string; what: string }> = [
-  { prefix: '/admin/teachers', what: 'на сервере ещё нет учителей и классов' },
   { prefix: '/admin/exams', what: 'конструктор пробных экзаменов появится вместе с банком опубликованных вопросов' },
-  { prefix: '/admin/assignments', what: 'школьные задания появятся вместе со школами' },
   { prefix: '/admin/activity', what: 'журнал действий учеников ещё не ведётся; действия сотрудников — в «Истории действий»' },
   { prefix: '/admin/finance', what: 'лицензии и платежи не подключены, ценовая модель не утверждена' },
   { prefix: '/admin/support', what: 'обращения пользователей ещё не принимаются' },
@@ -44,6 +42,9 @@ const NOT_CONNECTED: Array<{ prefix: string; what: string }> = [
 /** Permission each section needs. Hiding is convenience: the server refuses the request anyway. */
 const SECTION_PERMISSION: Array<{ prefix: string; permission: string }> = [
   { prefix: '/admin/users', permission: 'users.read' },
+  { prefix: '/admin/schools', permission: 'schools.read' },
+  { prefix: '/admin/teachers', permission: 'schools.read' },
+  { prefix: '/admin/assignments', permission: 'schools.read' },
   { prefix: '/admin/content/review', permission: 'content.review' },
   { prefix: '/admin/content/questions/new', permission: 'content.create' },
   { prefix: '/admin/content/questions/import', permission: 'content.create' },

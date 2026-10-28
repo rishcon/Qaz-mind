@@ -59,8 +59,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPath, onNavig
       items: [
         { title: 'Обзор', path: '/admin', icon: LayoutDashboard },
         { title: 'Пользователи', path: '/admin/users', icon: Users, requiredPermission: 'users.read' },
-        { title: 'Школы', path: '/admin/schools', icon: Building2, requiredPermission: 'schools.read' },
-        { title: 'Учителя', path: '/admin/teachers', icon: GraduationCap, requiredPermission: 'users.read', soon: true },
+        { title: 'Школы', path: '/admin/schools', icon: Building2, requiredPermission: 'schools.read', badge: count('school_applications') },
+        { title: 'Учителя', path: '/admin/teachers', icon: GraduationCap, requiredPermission: 'schools.read' },
       ],
     },
     {
@@ -77,7 +77,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPath, onNavig
           requiredPermission: 'content.review',
         },
         { title: 'Экзамены', path: '/admin/exams', icon: Award, requiredPermission: 'exams.manage', soon: true },
-        { title: 'Задания', path: '/admin/assignments', icon: CalendarCheck, requiredPermission: 'schools.read', soon: true },
+        { title: 'Задания', path: '/admin/assignments', icon: CalendarCheck, requiredPermission: 'schools.read' },
       ],
     },
     {

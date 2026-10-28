@@ -1,287 +1,279 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Building2, Edit3 } from 'lucide-react';
-import { adminService, ADMIN_API_CONNECTED } from '../services/adminService';
+import { ArrowLeft } from 'lucide-react';
+import { adminApi } from '../api/client';
+import { runAction, useAdminData } from '../api/useAdminData';
+import { useStaff } from '../auth/StaffAuth';
 import { StatusBadge } from '../components/ui/StatusBadge';
-import { ActionResultNotice, failureResult, type ActionResult } from '../components/ui/ConnectionNotice';
+import { ConfirmationDialog } from '../components/ui/ConfirmationDialog';
+import { ActionResultNotice, type ActionResult } from '../components/ui/ConnectionNotice';
+import { ErrorBlock, ForbiddenBlock, LoadingBlock, fmtDate } from '../components/ui/PageState';
 
 interface SchoolDetailPageProps {
   schoolId: string;
   onNavigate: (path: string) => void;
 }
 
+const TYPE_LABELS: Record<string, string> = {
+  school: 'Школа',
+  lyceum: 'Лицей',
+  gymnasium: 'Гимназия',
+  college: 'Колледж',
+  tutoring_center: 'Учебный центр',
+  other: 'Другое',
+};
+const ASSIGNMENT_LABELS: Record<string, string> = { draft: 'черновики', published: 'идут', closed: 'закрыты', archived: 'в архиве' };
+
+const card = 'bg-white rounded-xl border border-[#E2DED5] p-5 space-y-3';
+const h2 = 'text-xs font-bold uppercase tracking-wider text-[#78716C]';
+
+/** One school for platform staff: who runs it, its classes, seats and what the platform may do with it. */
 export const SchoolDetailPage: React.FC<SchoolDetailPageProps> = ({ schoolId, onNavigate }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'classes' | 'teachers' | 'licenses'>('overview');
-  const [seatsEditMode, setSeatsEditMode] = useState(false);
-  const [newSeatsValue, setNewSeatsValue] = useState<number>(0);
+  const { can } = useStaff();
+  const detail = useAdminData(() => adminApi.organization(schoolId), [schoolId]);
   const [result, setResult] = useState<ActionResult | null>(null);
+  const [target, setTarget] = useState<'suspended' | 'archived' | 'active' | null>(null);
+  const [reason, setReason] = useState('');
+  const [cancelId, setCancelId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const school = adminService.getSchoolById(schoolId);
+  if (!can('schools.read')) return <ForbiddenBlock />;
+  if (detail.error) return <ErrorBlock text={detail.error} onRetry={detail.reload} />;
+  if (!detail.data) return <LoadingBlock />;
 
-  if (!school) {
-    return (
-      <div className="bg-white rounded-xl border border-[#E2DED5] p-12 text-center">
-        <h2 className="text-base font-bold text-[#171717]">
-          {ADMIN_API_CONNECTED ? 'Школа не найдена' : 'Данные не загружены'}
-        </h2>
-        {!ADMIN_API_CONNECTED && (
-          <p className="text-xs text-[#78716C] mt-1">Сервер администрирования не подключён.</p>
-        )}
-        <button
-          onClick={() => onNavigate('/admin/schools')}
-          className="mt-4 px-4 py-2 bg-[#FF5A36] text-white text-xs font-semibold rounded-md"
-        >
-          Вернуться к списку
-        </button>
-      </div>
+  const { organization: org, people, classes, licenses, assignments, application } = detail.data;
+  const admins = people.filter((p) => p.role === 'SCHOOL_ADMIN' && p.status === 'active');
+  const teachers = people.filter((p) => p.role === 'TEACHER' && p.status === 'active');
+  const students = classes.reduce((sum, c) => sum + c.student_count, 0);
+  const current = licenses.find((l) => l.current);
+
+  const changeStatus = async () => {
+    if (!target) return;
+    setBusy(true);
+    const ok = await runAction(
+      () => adminApi.setOrganizationStatus(org.id, target, reason.trim()),
+      target === 'active' ? 'Школа снова активна.' : 'Статус школы изменён. Изменения в школе теперь недоступны.',
+      setResult,
     );
-  }
+    setBusy(false);
+    setTarget(null);
+    setReason('');
+    if (ok) detail.reload();
+  };
 
-  const schoolMembers = adminService.getSchoolMembers(school.id);
-  const schoolTeachers = schoolMembers.filter((u) => u.role === 'teacher');
-  const schoolClasses = school.classesList ?? [];
-
-  const handleSaveSeats = () => {
-    try {
-      adminService.updateSchoolSeats(school.id, newSeatsValue);
-      setSeatsEditMode(false);
-      setResult({ tone: 'success', text: 'Квота мест обновлена.' });
-    } catch (error) {
-      setResult(failureResult(error));
-    }
+  const cancelLicense = async () => {
+    if (!cancelId) return;
+    setBusy(true);
+    const ok = await runAction(() => adminApi.cancelLicense(org.id, cancelId), 'Лицензия отменена.', setResult);
+    setBusy(false);
+    setCancelId(null);
+    if (ok) detail.reload();
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-150">
-      {/* Header */}
-      <div className="bg-white rounded-xl border border-[#E2DED5] p-6 shadow-xs">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => onNavigate('/admin/schools')}
-              className="p-1.5 rounded-md hover:bg-[#F5F3EE] text-[#78716C] cursor-pointer"
-            >
-              <ArrowLeft className="w-5 h-5 text-[#171717]" />
-            </button>
+    <div className="space-y-5 animate-in fade-in duration-150">
+      <button onClick={() => onNavigate('/admin/schools')} className="flex items-center gap-1.5 text-xs text-[#78716C] hover:text-[#171717] cursor-pointer">
+        <ArrowLeft className="w-3.5 h-3.5" /> Все школы
+      </button>
 
-            <div className="w-12 h-12 rounded-xl bg-[#FFF7F5] border border-[#FF5A36]/30 flex items-center justify-center text-[#FF5A36]">
-              <Building2 className="w-6 h-6" />
-            </div>
-
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-lg font-bold text-[#171717]">{school.name}</h1>
-                <StatusBadge status={school.approvalStatus} />
-              </div>
-              <p className="text-xs text-[#78716C] mt-0.5">
-                {school.city} • БИН: <span className="font-mono">{school.binNumber}</span> • Лицензия: {school.purchasedSeats} мест
-              </p>
-            </div>
+      <div className="flex flex-wrap items-start justify-between gap-3 pb-2 border-b border-[#E2DED5]">
+        <div>
+          <h1 className="text-xl font-bold text-[#171717] flex items-center gap-2.5">
+            {org.name} <StatusBadge status={org.status} />
+          </h1>
+          <p className="text-xs text-[#78716C] mt-0.5">
+            {TYPE_LABELS[org.type] ?? org.type} · {org.city} · подключена {fmtDate(org.created_at)}
+          </p>
+        </div>
+        {can('schools.approve') && (
+          <div className="flex gap-2">
+            {org.status === 'active' ? (
+              <>
+                <button onClick={() => setTarget('suspended')} className="px-3 py-1.5 text-xs text-[#9A6715] bg-white border border-[#E8C98A] rounded hover:bg-[#FEF7EA] cursor-pointer">
+                  Приостановить
+                </button>
+                <button onClick={() => setTarget('archived')} className="px-3 py-1.5 text-xs text-[#C94A43] bg-white border border-[#FCA5A5] rounded hover:bg-[#FFF1F2] cursor-pointer">
+                  В архив
+                </button>
+              </>
+            ) : (
+              <button onClick={() => setTarget('active')} className="px-3 py-1.5 text-xs font-semibold text-white bg-[#258568] hover:bg-[#1D6A53] rounded cursor-pointer">
+                Вернуть в работу
+              </button>
+            )}
           </div>
-        </div>
-
-        {/* Tab Header */}
-        <div className="flex items-center gap-1 border-t border-[#E2DED5] mt-6 pt-2 overflow-x-auto">
-          {[
-            { id: 'overview', label: 'Обзор и контакты' },
-            { id: 'classes', label: `Классы (${school.totalClasses})` },
-            { id: 'teachers', label: `Преподаватели (${school.totalTeachers})` },
-            { id: 'licenses', label: 'Управление лицензиями' },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
-                activeTab === tab.id
-                  ? 'bg-[#171717] text-white shadow-xs'
-                  : 'text-[#78716C] hover:bg-[#F5F3EE] hover:text-[#171717]'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        )}
       </div>
 
       <ActionResultNotice result={result} onDismiss={() => setResult(null)} />
-
-      {/* TAB 1: OVERVIEW */}
-      {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white rounded-xl border border-[#E2DED5] p-5 space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-[#171717]">
-              Официальные реквизиты школы
-            </h3>
-            <div className="divide-y divide-[#E2DED5] text-xs">
-              <div className="py-2.5 flex justify-between">
-                <span className="text-[#78716C]">Город / Регион:</span>
-                <span className="font-semibold text-[#171717]">{school.city}</span>
-              </div>
-              <div className="py-2.5 flex justify-between">
-                <span className="text-[#78716C]">БИН организации:</span>
-                <span className="font-mono text-[#171717]">{school.binNumber}</span>
-              </div>
-              <div className="py-2.5 flex justify-between">
-                <span className="text-[#78716C]">Контактное лицо:</span>
-                <span className="font-medium text-[#171717]">{school.contactPerson}</span>
-              </div>
-              <div className="py-2.5 flex justify-between">
-                <span className="text-[#78716C]">Email:</span>
-                <span className="font-mono text-[#171717]">{school.contactEmail}</span>
-              </div>
-              <div className="py-2.5 flex justify-between">
-                <span className="text-[#78716C]">Телефон:</span>
-                <span className="font-mono text-[#171717]">{school.contactPhone}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-[#E2DED5] p-5 space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-[#171717]">
-              Статистика использования платформы
-            </h3>
-            <div className="grid grid-cols-2 gap-3 text-center">
-              <div className="p-3 bg-[#FAF9F6] border border-[#E2DED5] rounded-lg">
-                <div className="text-xs text-[#78716C]">Учащихся в системе</div>
-                <div className="text-xl font-bold text-[#171717] mt-1">{school.totalStudents}</div>
-              </div>
-              <div className="p-3 bg-[#FAF9F6] border border-[#E2DED5] rounded-lg">
-                <div className="text-xs text-[#78716C]">Преподавателей</div>
-                <div className="text-xl font-bold text-[#171717] mt-1">{school.totalTeachers}</div>
-              </div>
-              <div className="p-3 bg-[#EBF7F2] border border-[#258568]/20 rounded-lg">
-                <div className="text-xs text-[#1D6A53]">Занято мест из лицензии</div>
-                <div className="text-xl font-bold text-[#258568] mt-1">
-                  {school.assignedSeats} из {school.purchasedSeats}
-                </div>
-              </div>
-              <div className="p-3 bg-[#FAF9F6] border border-[#E2DED5] rounded-lg">
-                <div className="text-xs text-[#78716C]">Всего классов</div>
-                <div className="text-xl font-bold text-[#171717] mt-1">{school.totalClasses}</div>
-              </div>
-            </div>
-          </div>
+      {org.status !== 'active' && (
+        <div role="status" className="px-4 py-2.5 rounded-lg border border-[#D89B35]/40 bg-[#FFF8EC] text-xs text-[#7A5410]">
+          Школа не активна: её администратор не может создавать классы, приглашать и назначать задания.
         </div>
       )}
 
-      {/* TAB 2: CLASSES */}
-      {activeTab === 'classes' && (
-        <div className="bg-white rounded-xl border border-[#E2DED5] p-5 space-y-3">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-[#171717]">
-            Список классов и параллелей
-          </h3>
-          <div className="divide-y divide-[#E2DED5] border border-[#E2DED5] rounded-lg overflow-hidden text-xs">
-            {schoolClasses.length === 0 ? (
-              <p className="p-4 text-[#78716C]">
-                {ADMIN_API_CONNECTED ? 'Классов пока нет.' : 'Список классов не загружен.'}
-              </p>
-            ) : (
-              schoolClasses.map((cl) => (
-                <div key={cl.id} className="p-3 flex items-center justify-between hover:bg-[#FAF9F6]">
-                  <div className="font-semibold text-[#171717]">{cl.name}</div>
-                  <span className="text-[#78716C]">{cl.studentCount} учеников</span>
-                </div>
-              ))
-            )}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          ['Администраторов', admins.length],
+          ['Учителей', teachers.length],
+          ['Классов', classes.filter((c) => c.status === 'active').length],
+          ['Учеников', students],
+        ].map(([label, value]) => (
+          <div key={label as string} className="bg-white rounded-xl border border-[#E2DED5] p-4">
+            <div className="text-2xl font-bold text-[#171717]">{value}</div>
+            <div className="text-[11px] text-[#78716C]">{label}</div>
           </div>
-        </div>
-      )}
+        ))}
+      </div>
 
-      {/* TAB 3: TEACHERS */}
-      {activeTab === 'teachers' && (
-        <div className="bg-white rounded-xl border border-[#E2DED5] p-5 space-y-3">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-[#171717]">
-            Прикрепленные преподаватели
-          </h3>
-          <div className="divide-y divide-[#E2DED5] border border-[#E2DED5] rounded-lg overflow-hidden text-xs">
-            {schoolTeachers.length === 0 ? (
-              <p className="p-4 text-[#78716C]">
-                {ADMIN_API_CONNECTED ? 'Преподавателей в школе пока нет.' : 'Список преподавателей не загружен.'}
-              </p>
-            ) : (
-              schoolTeachers.map((t) => (
-                <div key={t.id} className="p-3 flex items-center justify-between hover:bg-[#FAF9F6]">
-                  <div>
-                    <div className="font-semibold text-[#171717]">{t.name}</div>
-                    <div className="text-[11px] text-[#78716C]">{t.email}</div>
-                  </div>
-                  <button
-                    onClick={() => onNavigate(`/admin/users/${t.id}`)}
-                    className="text-xs text-[#FF5A36] font-medium hover:underline"
-                  >
-                    Профиль преподавателя →
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 4: LICENSES ALLOCATION */}
-      {activeTab === 'licenses' && (
-        <div className="bg-white rounded-xl border border-[#E2DED5] p-6 max-w-xl space-y-4">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-[#171717]">
-            Распределение ученических мест и лицензий
-          </h3>
-          <p className="text-xs text-[#78716C] leading-relaxed">
-            Администратор платформы может выделить дополнительный лимит мест для школы при заключении договора или продлении подписки.
-          </p>
-
-          <div className="p-4 bg-[#FAF9F6] border border-[#E2DED5] rounded-xl space-y-3 text-xs">
-            <div className="flex justify-between items-center">
-              <span className="text-[#78716C]">Текущий оплаченный лимит мест:</span>
-              <span className="font-bold text-[#171717] text-sm">{school.purchasedSeats} мест</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-[#78716C]">Фактически активировано учениками:</span>
-              <span className="font-bold text-[#258568]">{school.assignedSeats} мест</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-[#78716C]">Доступно для регистрации:</span>
-              <span className="font-bold text-[#FF5A36]">{school.purchasedSeats - school.assignedSeats} мест</span>
-            </div>
-          </div>
-
-          {!seatsEditMode ? (
-            <button
-              onClick={() => {
-                setNewSeatsValue(school.purchasedSeats);
-                setSeatsEditMode(true);
-              }}
-              className="px-4 py-2 text-xs font-semibold text-white bg-[#171717] hover:bg-[#333] rounded-md cursor-pointer flex items-center gap-1.5 shadow-xs"
-            >
-              <Edit3 className="w-3.5 h-3.5" /> Изменить квоту мест школы
-            </button>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <section className={card}>
+          <h2 className={h2}>Лицензия и места</h2>
+          {licenses.length === 0 ? (
+            <p className="text-xs text-[#78716C]">
+              Лицензии нет, поэтому ученики не могут вступать в классы. Выдайте её на вкладке «Организации» списка школ{can('finance.manage') ? '' : ' (нужно право finance.manage)'}.
+            </p>
           ) : (
-            <div className="p-4 border border-[#FF5A36]/30 bg-[#FFF7F5] rounded-xl space-y-3">
-              <label className="text-xs font-bold text-[#171717] block">
-                Новый лимит мест для учащихся:
-              </label>
-              <input
-                type="number"
-                min={school.assignedSeats}
-                value={newSeatsValue}
-                onChange={(e) => setNewSeatsValue(Number(e.target.value))}
-                className="w-full text-sm font-bold px-3 py-2 bg-white border border-[#E2DED5] rounded-md"
-              />
-              <div className="flex items-center gap-2 pt-1">
-                <button
-                  onClick={handleSaveSeats}
-                  className="px-4 py-1.5 text-xs font-semibold text-white bg-[#FF5A36] hover:bg-[#E84D2B] rounded cursor-pointer shadow-xs"
-                >
-                  Сохранить квоту
-                </button>
-                <button
-                  onClick={() => setSeatsEditMode(false)}
-                  className="px-3 py-1.5 text-xs text-[#78716C] bg-white border border-[#E2DED5] rounded hover:bg-[#F5F3EE]"
-                >
-                  Отмена
-                </button>
-              </div>
-            </div>
+            <ul className="space-y-2">
+              {licenses.map((l) => (
+                <li key={l.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span>
+                    <b>{l.plan}</b> · {l.seats_used} / {l.seat_limit} мест · {fmtDate(l.starts_at)} — {fmtDate(l.expires_at)}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    {l.current ? <StatusBadge status="active" label="действует" /> : <StatusBadge status={l.status === 'cancelled' ? 'archived' : 'expired'} label={l.status === 'cancelled' ? 'отменена' : 'не действует'} />}
+                    {l.status === 'active' && can('finance.manage') && (
+                      <button onClick={() => setCancelId(l.id)} className="text-[#C94A43] underline cursor-pointer">
+                        отменить
+                      </button>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
-        </div>
-      )}
+          {current && current.seats_used >= current.seat_limit && <p className="text-xs text-[#9A6715]">Места закончились: новые ученики вступить не смогут.</p>}
+        </section>
+
+        <section className={card}>
+          <h2 className={h2}>Заявка школы</h2>
+          {application ? (
+            <dl className="text-xs space-y-1">
+              <div>
+                <dt className="inline text-[#78716C]">Контакт: </dt>
+                <dd className="inline">
+                  {application.contact_name}
+                  {application.contact_position ? `, ${application.contact_position}` : ''}
+                </dd>
+              </div>
+              <div>
+                <dt className="inline text-[#78716C]">Телефон: </dt>
+                <dd className="inline">{application.contact_phone}</dd>
+              </div>
+              <div>
+                <dt className="inline text-[#78716C]">Учеников со слов: </dt>
+                <dd className="inline">{application.approx_students}</dd>
+              </div>
+              <div>
+                <dt className="inline text-[#78716C]">Подана: </dt>
+                <dd className="inline">{fmtDate(application.created_at)}</dd>
+              </div>
+            </dl>
+          ) : (
+            <p className="text-xs text-[#78716C]">Заявки нет.</p>
+          )}
+          <h2 className={`${h2} pt-2`}>Школьные задания</h2>
+          {Object.keys(assignments).length === 0 ? (
+            <p className="text-xs text-[#78716C]">Заданий пока нет.</p>
+          ) : (
+            <p className="text-xs">
+              {Object.entries(assignments)
+                .map(([status, n]) => `${ASSIGNMENT_LABELS[status] ?? status}: ${n}`)
+                .join(' · ')}
+            </p>
+          )}
+        </section>
+
+        <section className={card}>
+          <h2 className={h2}>Администраторы и учителя</h2>
+          {people.length === 0 ? (
+            <p className="text-xs text-[#78716C]">Никого нет.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {people.map((p) => (
+                <li key={p.user_id} className={`flex flex-wrap items-center justify-between gap-2 text-xs ${p.status === 'revoked' ? 'opacity-50' : ''}`}>
+                  <span>
+                    <b>{p.name}</b> <span className="text-[#78716C]">{p.email}</span>
+                  </span>
+                  <span className="text-[#5C574F]">
+                    {p.role === 'SCHOOL_ADMIN' ? 'администратор' : 'учитель'}
+                    {p.status === 'revoked' ? ' · отключён' : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className={card}>
+          <h2 className={h2}>Классы</h2>
+          {classes.length === 0 ? (
+            <p className="text-xs text-[#78716C]">Классов пока нет.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {classes.map((c) => (
+                <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span>
+                    <b>{c.name}</b> <span className="text-[#78716C]">{c.academic_year}</span>
+                    {c.status !== 'active' ? ' · в архиве' : ''}
+                  </span>
+                  <span className="text-[#5C574F]">
+                    учеников {c.student_count} · учителей {c.teacher_count}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+
+      <ConfirmationDialog
+        isOpen={!!target}
+        title={target === 'active' ? 'Вернуть школу в работу?' : target === 'archived' ? 'Отправить школу в архив?' : 'Приостановить школу?'}
+        message={
+          target === 'active'
+            ? 'Администратор снова сможет работать в кабинете школы.'
+            : 'Данные сохранятся, но создавать классы, приглашать и назначать задания будет нельзя. Причина попадёт в журнал действий.'
+        }
+        variant={target === 'active' ? 'primary' : 'danger'}
+        confirmLabel={busy ? 'Сохраняем…' : 'Подтвердить'}
+        confirmDisabled={busy || (target !== 'active' && reason.trim().length < 5)}
+        onConfirm={changeStatus}
+        onCancel={() => {
+          setTarget(null);
+          setReason('');
+        }}
+      >
+        {target !== 'active' && (
+          <textarea
+            rows={3}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Причина (не короче 5 символов)"
+            className="w-full text-xs p-2.5 bg-white border border-[#E2DED5] rounded-md text-[#171717]"
+          />
+        )}
+      </ConfirmationDialog>
+
+      <ConfirmationDialog
+        isOpen={!!cancelId}
+        title="Отменить лицензию?"
+        message="Новые ученики не смогут вступать в классы. Уже вступившие ученики и их личный прогресс не удаляются."
+        variant="danger"
+        confirmLabel={busy ? 'Отменяем…' : 'Отменить лицензию'}
+        confirmDisabled={busy}
+        onConfirm={cancelLicense}
+        onCancel={() => setCancelId(null)}
+      />
     </div>
   );
 };

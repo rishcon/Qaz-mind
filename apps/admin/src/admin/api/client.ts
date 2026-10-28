@@ -293,6 +293,53 @@ export interface OrganizationRow {
   license: { plan: string; seat_limit: number; seats_used: number; expires_at: string } | null;
 }
 
+export interface SchoolLicense {
+  id: string;
+  plan: string;
+  seat_limit: number;
+  seats_used: number;
+  starts_at: string;
+  expires_at: string;
+  status: string;
+  current: boolean;
+}
+
+export interface OrganizationDetail {
+  organization: { id: string; name: string; type: string; city: string; status: 'active' | 'suspended' | 'archived'; created_at: string };
+  people: { user_id: string; name: string; email: string; role: 'SCHOOL_ADMIN' | 'TEACHER'; status: 'active' | 'revoked' }[];
+  classes: { id: string; name: string; academic_year: string; status: string; student_count: number; teacher_count: number }[];
+  licenses: SchoolLicense[];
+  assignments: Record<string, number>;
+  application: { contact_name: string; contact_position: string; contact_phone: string; approx_students: number; created_at: string } | null;
+}
+
+export interface SchoolPerson {
+  user_id: string;
+  name: string;
+  email: string;
+  role: 'SCHOOL_ADMIN' | 'TEACHER';
+  organization_id: string;
+  organization_name: string;
+  organization_status: string;
+  class_count: number | null;
+  joined_at: string;
+}
+
+export interface SchoolAssignmentRow {
+  id: string;
+  title: string;
+  subject_id: string;
+  status: 'draft' | 'published' | 'closed' | 'archived';
+  question_count: number;
+  organization_id: string;
+  organization_name: string;
+  created_by: string;
+  due_at: string | null;
+  class_count: number;
+  submitted_students: number;
+  created_at: string;
+}
+
 export const adminApi = {
   // sign-in
   login: (email: string, password: string) =>
@@ -366,6 +413,12 @@ export const adminApi = {
   createLicense: (orgId: string, body: { plan: string; seat_limit: number; starts_at: string; expires_at: string }) =>
     post<unknown>(`/admin/organizations/${orgId}/licenses`, body),
   organizations: () => get<{ items: OrganizationRow[] }>('/admin/organizations'),
+  organization: (id: string) => get<OrganizationDetail>(`/admin/organizations/${id}`),
+  setOrganizationStatus: (id: string, status: 'active' | 'suspended' | 'archived', reason: string) =>
+    post<{ status: string }>(`/admin/organizations/${id}/status`, { status, reason }),
+  cancelLicense: (orgId: string, licenseId: string) => post<unknown>(`/admin/organizations/${orgId}/licenses/${licenseId}/cancel`),
+  schoolTeachers: () => get<{ items: SchoolPerson[] }>('/admin/teachers'),
+  schoolAssignments: () => get<{ items: SchoolAssignmentRow[] }>('/admin/assignments'),
   importQuestions: (rows: QuestionBody[]) => post<{ created: number }>('/admin/questions/import', { rows }),
   /** Checks the rows on the server without saving anything. Row numbers count the rows that were sent. */
   checkQuestionImport: (rows: QuestionBody[]) =>
