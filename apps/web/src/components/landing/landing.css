@@ -1,0 +1,28 @@
+/* Landing motion. Everything here is switched off for users who prefer less motion. */
+@keyframes qm-rise {
+  from { opacity: 0; transform: translateY(105%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes qm-fade {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes qm-swap {
+  from { opacity: 0; transform: translateY(100%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes qm-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.qm-rise { display: inline-block; opacity: 0; animation: qm-rise 0.95s cubic-bezier(0.2, 0.7, 0.2, 1) forwards; animation-delay: var(--d, 0ms); }
+.qm-fade { opacity: 0; animation: qm-fade 0.9s ease-out forwards; animation-delay: var(--d, 0ms); }
+.qm-swap { display: inline-block; animation: qm-swap 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.qm-marquee { display: flex; width: max-content; animation: qm-marquee 45s linear infinite; }
+.qm-outline { color: transparent; -webkit-text-stroke: 1px #171717; }
+
+@media (prefers-reduced-motion: reduce) {
+  .qm-rise, .qm-fade, .qm-swap { animation: none; opacity: 1; transform: none; }
+  .qm-marquee { animation: none; }
+}

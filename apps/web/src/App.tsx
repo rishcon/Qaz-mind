@@ -13,7 +13,6 @@ import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
 import { StepsSection } from './components/landing/StepsSection';
 import { ExamSection } from './components/landing/ExamSection';
-import { SchoolSection } from './components/landing/SchoolSection';
 import { FinalCtaSection } from './components/FinalCtaSection';
 import { Footer } from './components/Footer';
 
@@ -544,7 +543,6 @@ export default function App() {
         />
         <StepsSection currentLang={currentLang} />
         <ExamSection currentLang={currentLang} />
-        <SchoolSection currentLang={currentLang} />
         <FinalCtaSection currentLang={currentLang} onStartFree={() => navigateTo('register', '/register')} />
       </main>
 

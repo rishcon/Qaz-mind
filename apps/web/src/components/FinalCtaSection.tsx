@@ -9,24 +9,28 @@ interface FinalCtaSectionProps {
   onStartFree: () => void;
 }
 
-/** Closing block. The only dark surface on the page, so the call to action is the last thing read. */
 export const FinalCtaSection: React.FC<FinalCtaSectionProps> = ({ currentLang, onStartFree }) => {
-  const t = locales[currentLang].finalCta;
+  const t = locales[currentLang].cta;
 
   return (
-    <section className="bg-[#171717] text-[#F5F3EE]">
-      <Reveal className="max-w-7xl mx-auto px-6 md:px-10 py-24 md:py-32 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-10">
-        <h2 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tighter leading-[0.98] font-display">
-          {t.title}
-        </h2>
-        <button
-          type="button"
-          onClick={onStartFree}
-          className="self-start inline-flex items-center gap-3 px-8 py-4 bg-[#FF5A36] hover:bg-[#E54825] active:translate-y-0.5 text-white font-display font-bold text-base tracking-wide uppercase transition-all duration-150 cursor-pointer shrink-0"
-        >
-          <span>{t.cta}</span>
-          <ArrowRight className="w-4 h-4" />
+    <section className="py-24 md:py-40 border-t border-[#E2DED5]">
+      <Reveal className="max-w-7xl mx-auto px-6 md:px-10">
+        <button type="button" onClick={onStartFree} className="group text-left cursor-pointer w-full">
+          <span className="block font-display font-extrabold tracking-tighter leading-[0.9] text-[#171717] text-6xl sm:text-8xl lg:text-[10rem] whitespace-pre-line transition-colors duration-300 group-hover:text-[#FF5A36]">
+            {t.title}
+          </span>
+          <span className="mt-10 inline-flex items-center gap-4 font-display font-bold uppercase tracking-wide text-base text-[#171717]">
+            <span className="flex items-center justify-center w-14 h-14 bg-[#FF5A36] text-white transition-transform duration-300 group-hover:translate-x-2">
+              <ArrowRight className="w-5 h-5" />
+            </span>
+            {t.button}
+          </span>
         </button>
+
+        <p className="mt-20 flex items-center gap-2 font-mono text-[11px] text-[#78716C]">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#FF5A36] animate-pulse" />
+          {t.school}
+        </p>
       </Reveal>
     </section>
   );

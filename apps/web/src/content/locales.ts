@@ -1,7 +1,7 @@
 import { Language } from '../types';
 
 /**
- * Landing copy. Short on purpose: the page shows the product, the text only names it.
+ * Landing copy. Short on purpose: the page explains the product in a sentence and lets the visitor try the exam structure.
  * Nothing here claims a result, a price or a feature that does not exist yet.
  */
 export interface LocaleContent {
@@ -9,126 +9,96 @@ export interface LocaleContent {
   hero: {
     label: string;
     title: string;
-    subtitle: string;
+    lead: string;
+    today: string;
     cta: string;
     secondary: string;
-    facts: Array<{ value: string; label: string }>;
   };
-  window: {
-    caption: string;
-    menu: string[];
-    firstStep: string;
-    firstStepTitle: string;
-    action: string;
-    cards: string[];
+  steps: {
+    label: string;
+    soon: string;
+    items: [{ title: string; text: string }, { title: string; text: string }, { title: string; text: string }];
   };
-  exam: {
+  build: {
     label: string;
     title: string;
-    caption: string;
-    note: string;
+    hint: string;
     mandatory: string;
     profile: string;
+    pick: string;
     tasks: string;
-    points: string;
+    of: string;
+    note: string;
   };
-  steps: { label: string; items: [string, string, string] };
-  school: { label: string; title: string; caption: string; tag: string; columns: [string, string, string] };
-  finalCta: { title: string; cta: string };
+  cta: { title: string; button: string; school: string };
   footer: { tagline: string; copyright: string };
 }
 
 export const locales: Record<Language, LocaleContent> = {
   ru: {
-    nav: { subjects: 'Предметы', howItWorks: 'Как это работает', login: 'Войти', start: 'Начать' },
+    nav: { subjects: 'Собрать ЕНТ', howItWorks: 'Как это работает', login: 'Войти', start: 'Начать' },
     hero: {
       label: 'ПОДГОТОВКА К ЕНТ',
-      title: 'ЕНТ по темам,\nа не наугад.',
-      subtitle: 'Уроки, задания и разбор ошибок в одном кабинете.',
+      title: 'ЕНТ — по одной\nтеме за раз.',
+      lead: 'QazMind — платформа подготовки к ЕНТ: короткие уроки по темам, задания с разбором и личный кабинет, где виден ваш путь.',
+      today: 'Сегодня',
       cta: 'Начать подготовку',
       secondary: 'Как это работает',
-      facts: [
-        { value: '120', label: 'заданий на экзамене' },
-        { value: '140', label: 'баллов максимум' },
-        { value: '240', label: 'минут' },
-      ],
-    },
-    window: {
-      caption: 'Схема личного кабинета',
-      menu: ['Сегодня', 'Мой маршрут', 'Предметы', 'Практика', 'Пробное ЕНТ', 'Мои ошибки', 'Прогресс'],
-      firstStep: 'Первый шаг',
-      firstStepTitle: 'Начните с первого урока',
-      action: 'К предметам',
-      cards: ['Моя цель', 'Изучено уроков', 'Ошибок к повторению'],
-    },
-    exam: {
-      label: 'СТРУКТУРА ЭКЗАМЕНА',
-      title: 'Экзамен по спецификации.',
-      caption: 'Три обязательных предмета и два профильных, которые выбираете вы.',
-      note: 'Пробный экзамен откроется, когда в банке появятся опубликованные вопросы.',
-      mandatory: 'Обязательные',
-      profile: 'Профильные',
-      tasks: 'заданий',
-      points: 'баллов',
     },
     steps: {
       label: 'КАК ЭТО РАБОТАЕТ',
-      items: ['Выберите предметы ЕНТ', 'Учитесь по темам', 'Решайте и разбирайте ошибки'],
+      soon: 'скоро',
+      items: [
+        { title: 'Выберите предметы', text: 'Три обязательных и два профильных — как на экзамене.' },
+        { title: 'Учитесь по темам', text: 'Короткие уроки: одна тема, один шаг.' },
+        { title: 'Закрепляйте', text: 'Задания с разбором, ошибки возвращаются на повторение.' },
+      ],
     },
-    school: {
-      label: 'ДЛЯ ШКОЛ',
-      title: 'Классы и задания учителя.',
-      caption: 'Кабинет школы в разработке.',
-      tag: 'В разработке',
-      columns: ['Классы', 'Ученики', 'Задания'],
+    build: {
+      label: 'ЭКЗАМЕН',
+      title: 'Соберите свой ЕНТ.',
+      hint: 'Выберите два профильных предмета — структура пересчитается.',
+      mandatory: 'Обязательный',
+      profile: 'Профильный',
+      pick: 'Выберите',
+      tasks: 'заданий',
+      of: 'из',
+      note: '240 минут · максимум 140 баллов · по спецификации ЕНТ',
     },
-    finalCta: { title: 'Начните подготовку сегодня.', cta: 'Создать аккаунт' },
+    cta: { title: 'Начните\nсегодня.', button: 'Создать аккаунт', school: 'Для школ — кабинет в разработке' },
     footer: { tagline: 'Подготовка к ЕНТ и ҰБТ', copyright: '© QAZMIND' },
   },
   kz: {
-    nav: { subjects: 'Пәндер', howItWorks: 'Қалай жұмыс істейді', login: 'Кіру', start: 'Бастау' },
+    nav: { subjects: 'ҰБТ құрастыру', howItWorks: 'Қалай жұмыс істейді', login: 'Кіру', start: 'Бастау' },
     hero: {
       label: 'ҰБТ-ҒА ДАЙЫНДЫҚ',
-      title: 'ҰБТ тақырыптар бойынша,\nжүйелі түрде.',
-      subtitle: 'Сабақтар, тапсырмалар және қателерді талдау — бір кабинетте.',
+      title: 'ҰБТ — бір\nтақырыптан.',
+      lead: 'QazMind — ҰБТ-ға дайындық платформасы: тақырыптар бойынша қысқа сабақтар, талдауы бар тапсырмалар және жолыңыз көрінетін жеке кабинет.',
+      today: 'Бүгін',
       cta: 'Дайындықты бастау',
       secondary: 'Қалай жұмыс істейді',
-      facts: [
-        { value: '120', label: 'емтихандағы тапсырма' },
-        { value: '140', label: 'ең көп балл' },
-        { value: '240', label: 'минут' },
-      ],
-    },
-    window: {
-      caption: 'Оқушы кабинетінің сызбасы',
-      menu: ['Бүгін', 'Менің маршрутым', 'Пәндер', 'Практика', 'Байқау ҰБТ-сы', 'Менің қателерім', 'Прогресс'],
-      firstStep: 'Бірінші қадам',
-      firstStepTitle: 'Алғашқы сабақтан бастаңыз',
-      action: 'Пәндерге',
-      cards: ['Менің мақсатым', 'Оқылған сабақтар', 'Қайталауға қателер'],
-    },
-    exam: {
-      label: 'ЕМТИХАН ҚҰРЫЛЫМЫ',
-      title: 'Спецификация бойынша емтихан.',
-      caption: 'Үш міндетті пән және екі бейіндік пән. Бейіндіктерін өзіңіз таңдайсыз.',
-      note: 'Байқау емтиханы жарияланған сұрақтар банкте пайда болғанда ашылады.',
-      mandatory: 'Міндетті',
-      profile: 'Бейіндік',
-      tasks: 'тапсырма',
-      points: 'балл',
     },
     steps: {
       label: 'ҚАЛАЙ ЖҰМЫС ІСТЕЙДІ',
-      items: ['ҰБТ пәндерін таңдаңыз', 'Тақырыптар бойынша оқыңыз', 'Тапсырма шешіп, қателерді талдаңыз'],
+      soon: 'жақында',
+      items: [
+        { title: 'Пәндерді таңдаңыз', text: 'Үш міндетті және екі бейіндік пән — емтихандағыдай.' },
+        { title: 'Тақырып бойынша оқыңыз', text: 'Қысқа сабақтар: бір тақырып, бір қадам.' },
+        { title: 'Бекітіңіз', text: 'Талдауы бар тапсырмалар, қателер қайталауға қайтады.' },
+      ],
     },
-    school: {
-      label: 'МЕКТЕПТЕР ҮШІН',
-      title: 'Сынып пен мұғалім тапсырмалары.',
-      caption: 'Мектеп кабинеті әзірленуде.',
-      tag: 'Әзірленуде',
-      columns: ['Сыныптар', 'Оқушылар', 'Тапсырмалар'],
+    build: {
+      label: 'ЕМТИХАН',
+      title: 'Өз ҰБТ-ңызды жинаңыз.',
+      hint: 'Екі бейіндік пәнді таңдаңыз — құрылым қайта есептеледі.',
+      mandatory: 'Міндетті',
+      profile: 'Бейіндік',
+      pick: 'Таңдаңыз',
+      tasks: 'тапсырма',
+      of: '/',
+      note: '240 минут · ең көбі 140 балл · ҰБТ спецификациясы бойынша',
     },
-    finalCta: { title: 'Дайындықты бүгіннен бастаңыз.', cta: 'Аккаунт ашу' },
+    cta: { title: 'Бүгіннен\nбастаңыз.', button: 'Аккаунт ашу', school: 'Мектептер үшін — кабинет әзірленуде' },
     footer: { tagline: 'ҰБТ және ЕНТ-ге дайындық', copyright: '© QAZMIND' },
   },
 };
