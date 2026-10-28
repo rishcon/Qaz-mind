@@ -23,6 +23,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute("DELETE FROM invitations WHERE role = 'SCHOOL_ADMIN'")
     op.drop_constraint('role_valid', 'invitations', type_='check')
     op.alter_column('invitations', 'role', existing_type=sa.String(length=12), type_=sa.String(length=8), existing_nullable=False)
     op.create_check_constraint('role_valid', 'invitations', "role IN ('TEACHER', 'STUDENT')")
