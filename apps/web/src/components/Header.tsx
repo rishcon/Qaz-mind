@@ -106,7 +106,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={onOpenRegister}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-[#FF5A36] hover:bg-[#E54825] active:translate-y-0.5 transition-all duration-150 uppercase tracking-wider rounded-none cursor-pointer"
           >
-            <span>{t.nav.startFree}</span>
+            <span>{t.nav.start}</span>
             <ArrowUpRight className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -177,7 +177,7 @@ export const Header: React.FC<HeaderProps> = ({
               }}
               className="w-full py-3.5 text-center text-sm font-bold text-white bg-[#FF5A36] hover:bg-[#E54825] uppercase tracking-wider transition-colors cursor-pointer"
             >
-              {t.nav.startFree}
+              {t.nav.start}
             </button>
           </div>
         </div>

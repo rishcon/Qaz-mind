@@ -11,10 +11,9 @@ import { ResetPasswordPage } from './components/auth/ResetPasswordPage';
 // Landing Page Components
 import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
-import { ProblemSection } from './components/ProblemSection';
-import { ApproachSection } from './components/ApproachSection';
-import { RouteSection } from './components/RouteSection';
-import { SubjectsSection } from './components/SubjectsSection';
+import { StepsSection } from './components/landing/StepsSection';
+import { ExamSection } from './components/landing/ExamSection';
+import { SchoolSection } from './components/landing/SchoolSection';
 import { FinalCtaSection } from './components/FinalCtaSection';
 import { Footer } from './components/Footer';
 
@@ -538,26 +537,14 @@ export default function App() {
       />
 
       <main>
-        {/* Hero Section */}
         <HeroSection
           currentLang={currentLang}
           onStart={() => navigateTo('register', '/register')}
           onExplore={() => scrollToSection('how-it-works')}
         />
-
-        {/* Section 01: The Problem */}
-        <ProblemSection currentLang={currentLang} />
-
-        {/* Section 02: The Approach */}
-        <ApproachSection currentLang={currentLang} />
-
-        {/* Section 03: Personal Learning Route */}
-        <RouteSection currentLang={currentLang} onStartRoute={() => navigateTo('register', '/register')} />
-
-        {/* Section 04: Subjects of the ENT */}
-        <SubjectsSection currentLang={currentLang} />
-
-        {/* Section 05: Final Call to Action */}
+        <StepsSection currentLang={currentLang} />
+        <ExamSection currentLang={currentLang} />
+        <SchoolSection currentLang={currentLang} />
         <FinalCtaSection currentLang={currentLang} onStartFree={() => navigateTo('register', '/register')} />
       </main>
 

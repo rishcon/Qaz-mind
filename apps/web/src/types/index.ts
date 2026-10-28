@@ -11,17 +11,4 @@ export interface SubjectItem {
   examTasks: number;
   /** Points for this subject in the 140-point exam. The specification states them for profile subjects only. */
   examPoints?: number;
-  descriptionRu: string;
-  descriptionKz: string;
-}
-
-/** One stage of the learning route. Stages carry no progress or duration: none of that is known yet. */
-export interface RouteStep {
-  step: string;
-  titleRu: string;
-  titleKz: string;
-  subtitleRu: string;
-  subtitleKz: string;
-  descriptionRu: string;
-  descriptionKz: string;
 }
