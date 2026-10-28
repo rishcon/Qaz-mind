@@ -37,7 +37,7 @@ export const MistakesView: React.FC<MistakesViewProps> = ({
           {currentLang === 'kz' ? 'Менің қателерім' : 'Мои ошибки'}
         </h1>
         <p className="mt-1 text-sm text-[#74736F]">
-          Вопросы из тестов и практики, где были допущены неточности.
+          Вопросы практики, на которые был дан неверный ответ. Ошибка считается усвоенной, когда последний ответ верный.
         </p>
       </div>
 
@@ -78,7 +78,7 @@ export const MistakesView: React.FC<MistakesViewProps> = ({
                   </span>
                   <span className="text-[#E2DED5]">·</span>
                   <span className="text-xs font-mono text-[#74736F]">
-                    {currentLang === 'kz' ? item.topicKz : item.topicRu}
+                    {currentLang === 'kz' ? `қате саны: ${item.wrongCount}` : `ошибок: ${item.wrongCount}`}
                   </span>
                 </div>
                 <h3 className="font-bold text-sm text-[#171717]">

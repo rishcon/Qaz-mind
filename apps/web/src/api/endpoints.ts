@@ -223,3 +223,28 @@ export const practiceApi = {
     }),
   finish: (id: string) => apiRequest<ApiPracticeSession>('POST', `/practice/sessions/${encodeURIComponent(id)}/finish`),
 };
+
+export interface ApiMistake {
+  question_id: string;
+  subject_id: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  text_ru: string;
+  text_kz: string;
+  options: ApiPracticeOption[];
+  correct_label: OptionLabel;
+  explanation_ru: string;
+  explanation_kz: string;
+  wrong_label: OptionLabel;
+  wrong_count: number;
+  last_wrong_at: string;
+  /** True when the latest answer to the question is correct. */
+  resolved: boolean;
+}
+
+export const mistakesApi = {
+  list: () => apiRequest<ApiMistake[]>('GET', '/practice/mistakes'),
+  retry: (questionId: string, label: OptionLabel) =>
+    apiRequest<ApiPracticeReview>('POST', `/practice/mistakes/${encodeURIComponent(questionId)}/retry`, {
+      selected_label: label,
+    }),
+};

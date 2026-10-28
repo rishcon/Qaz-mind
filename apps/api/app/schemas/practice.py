@@ -68,3 +68,27 @@ class AnswerIn(BaseModel):
 class StatsOut(BaseModel):
     answered: int
     correct: int
+
+
+class MistakeOut(BaseModel):
+    """A question the student answered wrongly. The key is shown because the student has already seen it."""
+
+    question_id: uuid.UUID
+    subject_id: str
+    difficulty: Literal["easy", "medium", "hard"]
+    text_ru: str
+    text_kz: str
+    options: list[OptionOut]
+    correct_label: Label
+    explanation_ru: str
+    explanation_kz: str
+    # The label chosen the last time the answer was wrong.
+    wrong_label: Label
+    wrong_count: int
+    last_wrong_at: datetime
+    # True when the latest answer to this question is correct.
+    resolved: bool
+
+
+class RetryIn(BaseModel):
+    selected_label: Label

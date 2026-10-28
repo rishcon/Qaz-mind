@@ -95,6 +95,8 @@
 | POST | `/api/v1/practice/sessions/{id}/answers` | `{question_id, selected_label}`; сервер проверяет и только после сохранения возвращает `correct_label` и пояснение; повтор даёт 409 `ALREADY_ANSWERED` |
 | POST | `/api/v1/practice/sessions/{id}/finish` | завершает сессию, возвращает итог |
 | GET | `/api/v1/practice/stats` | `{answered, correct}` по сохранённым ответам пользователя |
+| GET | `/api/v1/practice/mistakes` | опубликованные вопросы, на которые ученик отвечал неверно, с ключом и пояснением (он их уже видел); `resolved`, если последний ответ верный; сначала неразобранные |
+| POST | `/api/v1/practice/mistakes/{question_id}/retry` | `{selected_label}`; повторный ответ сохраняется как однозадачная завершённая сессия; вопроса не из ошибок ученика даёт 404 |
 
 Все эти маршруты требуют сессии. Контент публикуется CLI, а не API: см. `apps/api/app/content/cli.py`.
 

@@ -9,6 +9,7 @@ from app.core.errors import AppError
 from app.core.time import utcnow
 from app.models import PracticeAnswer, PracticeSession, Question, Subject
 from app.schemas.practice import (
+    MistakeOut,
     OptionOut,
     PracticeQuestionOut,
     PracticeSubjectOut,
@@ -171,3 +172,88 @@ class PracticeService:
             )
         ).one()
         return StatsOut(answered=answered, correct=correct)
+
+    async def mistakes(self, user_id: uuid.UUID) -> list[MistakeOut]:
+        """Published questions the student has answered wrongly at least once, unresolved ones first.
+
+        A mistake is resolved when the latest answer to the question is correct.
+        """
+        rows = (
+            await self.db.execute(
+                select(
+                    PracticeAnswer.question_id,
+                    PracticeAnswer.selected_label,
+                    PracticeAnswer.is_correct,
+                    PracticeAnswer.answered_at,
+                )
+                .join(PracticeSession, PracticeSession.id == PracticeAnswer.session_id)
+                .where(PracticeSession.user_id == user_id)
+                .order_by(PracticeAnswer.answered_at)
+            )
+        ).all()
+        state: dict[uuid.UUID, dict] = {}
+        for qid, label, correct, at in rows:
+            entry = state.setdefault(qid, {"wrong": 0, "label": None, "at": None, "latest": True})
+            entry["latest"] = correct
+            if not correct:
+                entry["wrong"] += 1
+                entry["label"] = label
+                entry["at"] = at
+        wrong_ids = [q for q, e in state.items() if e["wrong"]]
+        if not wrong_ids:
+            return []
+        questions = (
+            await self.db.execute(select(Question).where(Question.id.in_(wrong_ids), Question.status == "published"))
+        ).scalars()
+        items = []
+        for q in questions:
+            e = state[q.id]
+            items.append(
+                MistakeOut(
+                    question_id=q.id,
+                    subject_id=q.subject_id,
+                    difficulty=q.difficulty,
+                    text_ru=q.text_ru,
+                    text_kz=q.text_kz,
+                    options=_question_out(q).options,
+                    correct_label=q.correct_label,
+                    explanation_ru=q.explanation_ru,
+                    explanation_kz=q.explanation_kz,
+                    wrong_label=e["label"],
+                    wrong_count=e["wrong"],
+                    last_wrong_at=e["at"],
+                    resolved=bool(e["latest"]),
+                )
+            )
+        items.sort(key=lambda m: (m.resolved, -m.last_wrong_at.timestamp()))
+        return items
+
+    async def retry(self, user_id: uuid.UUID, question_id: uuid.UUID, label: str) -> ReviewOut:
+        """Answers a question again from the mistakes list. It is stored as a one-question session that is finished
+        at once, so the answer counts in the student's history like any other."""
+        mine = {m.question_id for m in await self.mistakes(user_id)}
+        if question_id not in mine:
+            raise AppError(404, "MISTAKE_NOT_FOUND", "Этого вопроса нет в списке ваших ошибок")
+        question = await self.db.get(Question, question_id)
+        if question is None or label not in {o["label"] for o in question.options}:
+            raise AppError(422, "INVALID_OPTION", "Такого варианта ответа нет")
+        now = utcnow()
+        session = PracticeSession(
+            user_id=user_id,
+            subject_id=question.subject_id,
+            question_ids=[str(question.id)],
+            created_at=now,
+            finished_at=now,
+        )
+        self.db.add(session)
+        await self.db.flush()
+        answer = PracticeAnswer(
+            session_id=session.id,
+            question_id=question.id,
+            selected_label=label,
+            is_correct=label == question.correct_label,
+            answered_at=now,
+        )
+        self.db.add(answer)
+        await self.db.commit()
+        return _review_out(question, answer)

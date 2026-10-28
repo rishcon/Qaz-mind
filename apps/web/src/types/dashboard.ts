@@ -8,21 +8,19 @@ export type DashboardView =
   | 'progress'
   | 'settings';
 
+/** A question the student answered wrongly, as stored on the server. `id` is the question id. */
 export interface MistakeItem {
   id: string;
   subjectRu: string;
   subjectKz: string;
-  topicRu: string;
-  topicKz: string;
   questionTextRu: string;
   questionTextKz: string;
-  studentAnswerRu: string;
-  studentAnswerKz: string;
-  correctAnswerRu: string;
-  correctAnswerKz: string;
+  options: { label: string; textRu: string; textKz: string }[];
+  wrongLabel: string;
+  correctLabel: string;
   explanationRu: string;
   explanationKz: string;
-  priority: 'high' | 'medium' | 'resolved';
+  wrongCount: number;
   resolved: boolean;
 }
 

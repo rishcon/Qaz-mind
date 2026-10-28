@@ -5,7 +5,16 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentDep, get_db
-from app.schemas.practice import AnswerIn, PracticeSubjectOut, ReviewOut, SessionCreate, SessionOut, StatsOut
+from app.schemas.practice import (
+    AnswerIn,
+    MistakeOut,
+    PracticeSubjectOut,
+    RetryIn,
+    ReviewOut,
+    SessionCreate,
+    SessionOut,
+    StatsOut,
+)
 from app.services.practice import PracticeService
 
 router = APIRouter(prefix="/practice", tags=["practice"])
@@ -26,6 +35,16 @@ async def practice_subjects(ctx: CurrentDep, practice: PracticeDep) -> list[Prac
 @router.get("/stats", response_model=StatsOut)
 async def practice_stats(ctx: CurrentDep, practice: PracticeDep) -> StatsOut:
     return await practice.stats(ctx.user.id)
+
+
+@router.get("/mistakes", response_model=list[MistakeOut])
+async def my_mistakes(ctx: CurrentDep, practice: PracticeDep) -> list[MistakeOut]:
+    return await practice.mistakes(ctx.user.id)
+
+
+@router.post("/mistakes/{question_id}/retry", response_model=ReviewOut)
+async def retry_mistake(question_id: uuid.UUID, body: RetryIn, ctx: CurrentDep, practice: PracticeDep) -> ReviewOut:
+    return await practice.retry(ctx.user.id, question_id, body.selected_label)
 
 
 @router.post("/sessions", response_model=SessionOut, status_code=201)

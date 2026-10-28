@@ -3,7 +3,7 @@ import { Language } from './types';
 import { DashboardView, MistakeItem, StudentProfile } from './types/dashboard';
 import { UserAccount } from './types/auth';
 import { useAuth } from './auth/AuthProvider';
-import { authApi, learningApi, MeResponse, OnboardingPayload, practiceApi, profileApi, ProfilePatch } from './api/endpoints';
+import { authApi, learningApi, MeResponse, OnboardingPayload, mistakesApi, practiceApi, profileApi, ProfilePatch } from './api/endpoints';
 import { emptyStudentProfile, toProfilePatch, toStudentProfile } from './api/mappers';
 import { UnavailablePage } from './components/common/UnavailablePage';
 import { ResetPasswordPage } from './components/auth/ResetPasswordPage';
@@ -131,6 +131,12 @@ const practiceSessionFromPath = (): string => {
   return section === 'practice' && kind === 'session' ? id : '';
 };
 
+/** Question id from /review/<id>, so a reload returns to the same mistake. */
+const mistakeFromPath = (): string => {
+  const [, section = '', id = ''] = window.location.pathname.split('/');
+  return section === 'review' ? id : '';
+};
+
 export default function App() {
   // Sync initial route from URL path or default to landing
   const getInitialRoute = (): AppRoute => {
@@ -186,8 +192,9 @@ export default function App() {
   // Completed lessons come from the server (GET /me/progress); see the effect below.
   const [completedLessonIds, setCompletedLessonIds] = useState<string[]>([]);
 
-  // Mistakes are not stored anywhere yet: they will come from practice once practice is connected to the server.
+  // Mistakes are the questions the student answered wrongly in practice; they are read from the server.
   const [mistakesList, setMistakesList] = useState<MistakeItem[]>([]);
+  const [mistakesLoaded, setMistakesLoaded] = useState(false);
 
   // Dashboard Navigation View
   const [dashboardView, setDashboardView] = useState<DashboardView>('today');
@@ -197,7 +204,7 @@ export default function App() {
   const [activePracticeSessionId, setActivePracticeSessionId] = useState<string>(practiceSessionFromPath);
   const [practiceSubjectId, setPracticeSubjectId] = useState<string>('');
   const [practicedCount, setPracticedCount] = useState(0);
-  const [activeMistakeReviewItem, setActiveMistakeReviewItem] = useState<MistakeItem | null>(null);
+  const [activeMistakeId, setActiveMistakeId] = useState<string>(mistakeFromPath);
 
   // URL synchronization helper
   const navigateTo = (route: AppRoute, pathUrl?: string) => {
@@ -218,6 +225,7 @@ export default function App() {
       setCurrentRoute(getInitialRoute());
       setActiveLessonSlug(lessonFromPath());
       setActivePracticeSessionId(practiceSessionFromPath());
+      setActiveMistakeId(mistakeFromPath());
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -238,6 +246,36 @@ export default function App() {
       .stats()
       .then((stats) => setPracticedCount(stats.answered))
       .catch(() => setPracticedCount(0));
+  }, [auth.user?.id, currentRoute, dashboardView]);
+
+  // Mistakes are read from the server on the dashboard and in the review screen.
+  const loadMistakes = () =>
+    Promise.all([mistakesApi.list(), learningApi.listSubjects()])
+      .then(([items, subjects]) => {
+        const title = (id: string) => subjects.find((s) => s.id === id);
+        setMistakesList(
+          items.map((m) => ({
+            id: m.question_id,
+            subjectRu: title(m.subject_id)?.title_ru ?? m.subject_id,
+            subjectKz: title(m.subject_id)?.title_kz ?? m.subject_id,
+            questionTextRu: m.text_ru,
+            questionTextKz: m.text_kz || m.text_ru,
+            options: m.options.map((o) => ({ label: o.label, textRu: o.text_ru, textKz: o.text_kz || o.text_ru })),
+            wrongLabel: m.wrong_label,
+            correctLabel: m.correct_label,
+            explanationRu: m.explanation_ru,
+            explanationKz: m.explanation_kz || m.explanation_ru,
+            wrongCount: m.wrong_count,
+            resolved: m.resolved,
+          })),
+        );
+      })
+      .catch(() => setMistakesList([]))
+      .finally(() => setMistakesLoaded(true));
+
+  useEffect(() => {
+    if (!auth.user || (currentRoute !== 'app' && currentRoute !== 'focus_mistake_review')) return;
+    void loadMistakes();
   }, [auth.user?.id, currentRoute, dashboardView]);
 
   // Auth gating: personal study and focus screens need a session; study needs a completed onboarding.
@@ -336,14 +374,10 @@ export default function App() {
 
   // Handler: Review Mistake in Focus Mode (Layout C)
   const handleReviewMistake = (mistake: MistakeItem) => {
-    setActiveMistakeReviewItem(mistake);
+    setActiveMistakeId(mistake.id);
     navigateTo('focus_mistake_review', `/review/${mistake.id}`);
   };
 
-  // Handler: Resolve Mistake
-  const handleResolveMistake = (mistakeId: string) => {
-    setMistakesList((prev) => prev.map((m) => (m.id === mistakeId ? { ...m, resolved: true } : m)));
-  };
 
   // ==========================================
   // ROUTE RENDERING
@@ -481,12 +515,35 @@ export default function App() {
     );
   }
 
-  if (currentRoute === 'focus_mistake_review' && activeMistakeReviewItem) {
+  if (currentRoute === 'focus_mistake_review') {
+    const mistake = mistakesList.find((m) => m.id === activeMistakeId);
+    if (!mistake) {
+      // Waiting for the list, or the question is not among this student's mistakes: say so, show nothing else.
+      return (
+        <div className="min-h-screen bg-[#F5F3EE] text-[#171717] flex flex-col items-center justify-center px-4 text-center gap-4">
+          <p className="font-mono text-xs text-[#74736F]">
+            {mistakesLoaded ? 'Этого вопроса нет в вашем списке ошибок.' : 'Загрузка…'}
+          </p>
+          {mistakesLoaded && (
+            <button
+              type="button"
+              onClick={() => {
+                navigateTo('app', '/app');
+                setDashboardView('mistakes');
+              }}
+              className="px-5 py-2.5 bg-[#171717] hover:bg-[#FF5A36] text-white font-mono text-xs font-bold cursor-pointer"
+            >
+              К списку ошибок
+            </button>
+          )}
+        </div>
+      );
+    }
     return (
       <FocusMistakeReview
-        mistake={activeMistakeReviewItem}
+        mistake={mistake}
         currentLang={currentLang}
-        onResolved={handleResolveMistake}
+        onAnswered={() => void loadMistakes()}
         onExit={() => {
           navigateTo('app', '/app');
           setDashboardView('mistakes');
