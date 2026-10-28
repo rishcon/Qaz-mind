@@ -319,9 +319,18 @@ export const schoolApi = {
       { class_ids: classIds },
     ),
 
+  overview: (orgId: string) => apiRequest<ApiSchoolOverview>('GET', `/organizations/${encodeURIComponent(orgId)}/overview`),
+  orgStudents: (orgId: string) =>
+    apiRequest<{ user_id: string; name: string; email: string; class_id: string; class_name: string }[]>(
+      'GET',
+      `/organizations/${encodeURIComponent(orgId)}/students`,
+    ),
+  admins: (orgId: string) => apiRequest<{ user_id: string; name: string; email: string }[]>('GET', `/organizations/${encodeURIComponent(orgId)}/admins`),
+  revokeMember: (orgId: string, userId: string) =>
+    apiRequest<void>('POST', `/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}/revoke`, {}),
   // invitations, codes, requests, licences
   invitations: (orgId: string) => apiRequest<ApiInvitation[]>('GET', `/organizations/${encodeURIComponent(orgId)}/invitations`),
-  invite: (orgId: string, body: { email: string; role: 'TEACHER' | 'STUDENT'; class_id?: string | null }) =>
+  invite: (orgId: string, body: { email: string; role: 'SCHOOL_ADMIN' | 'TEACHER' | 'STUDENT'; class_id?: string | null }) =>
     apiRequest<ApiInvitation>('POST', `/organizations/${encodeURIComponent(orgId)}/invitations`, body),
   resendInvitation: (orgId: string, id: string) =>
     apiRequest<ApiInvitation>('POST', `/organizations/${encodeURIComponent(orgId)}/invitations/${encodeURIComponent(id)}/resend`, {}),
@@ -471,10 +480,20 @@ export const assignmentApi = {
     apiRequest<ApiAttempt>('POST', `/school-assignments/attempts/${encodeURIComponent(attemptId)}/finish`, {}),
 };
 
+export interface ApiSchoolOverview {
+  classes: number;
+  students: number;
+  teachers: number;
+  admins: number;
+  pending_join_requests: number;
+  assignments: { draft: number; published: number; closed: number };
+  license: ApiLicense | null;
+}
+
 export interface ApiInvitation {
   id: string;
   email: string;
-  role: 'TEACHER' | 'STUDENT';
+  role: 'SCHOOL_ADMIN' | 'TEACHER' | 'STUDENT';
   class_id: string | null;
   status: 'pending' | 'accepted' | 'revoked';
   expires_at: string;

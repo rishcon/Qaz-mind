@@ -498,7 +498,7 @@ export default function App() {
 
   if (currentRoute === 'school') {
     if (!auth.user) return null; // the guard above sends an anonymous visitor to the login page
-    return <SchoolCabinet onExit={() => navigateTo('app', '/app')} onApply={() => navigateTo('schools_apply', '/schools/apply')} />;
+    return <SchoolCabinet myUserId={auth.user.id} onExit={() => navigateTo('app', '/app')} onApply={() => navigateTo('schools_apply', '/schools/apply')} />;
   }
 
   const unavailableScreen = UNAVAILABLE_ROUTES[currentRoute];

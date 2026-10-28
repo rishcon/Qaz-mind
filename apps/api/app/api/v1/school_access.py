@@ -312,3 +312,21 @@ async def organization_overview(org_id: uuid.UUID, ctx: CurrentDep, access: Acce
         "assignments": assignments,
         "license": licence,
     }
+
+
+@router.get("/organizations/{org_id}/admins")
+async def organization_admins(org_id: uuid.UUID, ctx: CurrentDep, access: AccessDep) -> list[dict]:
+    from app.models import OrganizationMember, User
+
+    await _school(access).member_of(ctx.user.id, org_id, ADMIN)
+    rows = await access.db.execute(
+        select(User)
+        .join(OrganizationMember, OrganizationMember.user_id == User.id)
+        .where(
+            OrganizationMember.organization_id == org_id,
+            OrganizationMember.role == "SCHOOL_ADMIN",
+            OrganizationMember.status == "active",
+        )
+        .order_by(User.name)
+    )
+    return [{"user_id": str(u.id), "name": u.name, "email": u.email} for u in rows.scalars()]

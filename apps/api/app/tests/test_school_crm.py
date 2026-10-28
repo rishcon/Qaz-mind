@@ -94,6 +94,8 @@ async def test_school_administrators_overview_and_removing_people(harness):
     assert (await api_post(deputy, f"{API}/invitations/accept", {"token": token})).json()["role"] == "SCHOOL_ADMIN"
     assert (await deputy.get(f"{API}/organizations/{org}/teachers")).status_code == 200
     assert (await admin.get(f"{API}/organizations/{org}/overview")).json()["admins"] == 2
+    assert [a["email"] for a in (await admin.get(f"{API}/organizations/{org}/admins")).json()] == ["a@school.kz", "deputy@school.kz"]
+    assert (await teacher.get(f"{API}/organizations/{org}/admins")).status_code == 403
 
     # Removing people: a teacher loses access with their classes; the last administrator stays.
     teacher_id = (await admin.get(f"{API}/organizations/{org}/teachers")).json()[0]["user_id"]
