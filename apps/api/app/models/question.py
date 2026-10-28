@@ -52,7 +52,7 @@ class Question(Base):
     correct_label: Mapped[str] = mapped_column(String(2))
     explanation_ru: Mapped[str] = mapped_column(Text, default="")
     explanation_kz: Mapped[str] = mapped_column(Text, default="")
-    source_reference: Mapped[str] = mapped_column(String(300), default="")
+    source_reference: Mapped[str] = mapped_column(String(1000), default="")
     external_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="draft")
     review_notes: Mapped[str] = mapped_column(Text, default="")

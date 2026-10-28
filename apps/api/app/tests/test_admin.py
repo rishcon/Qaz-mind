@@ -347,3 +347,16 @@ async def test_owner_can_approve_and_publish_in_bulk_others_cannot_their_own(har
     assert (await api_post(owner, base + "/bulk", {"action": "return", "ids": [qid]})).status_code == 422
     author_only = await staff(harness, "writer@qazmind.kz", ["CONTENT_MANAGER"])
     assert (await api_post(author_only, base + "/bulk", {"action": "approve", "ids": [qid]})).status_code == 403
+
+
+async def test_import_accepts_a_long_source_citation(harness):
+    owner = await staff(harness, "owner@qazmind.kz", ["OWNER"])
+    long_source = "Национальный центр тестирования. " + "Спецификация теста, раздел и тема. " * 12
+    assert 300 < len(long_source) <= 1000
+    row = {**imported("LONG-1"), "source_reference": long_source}
+    checked = await api_post(owner, "/api/v1/admin/questions/import?dry_run=true", {"rows": [row]})
+    assert checked.status_code == 200 and checked.json()["errors"] == []
+    created = await api_post(owner, "/api/v1/admin/questions/import", {"rows": [row]})
+    assert created.status_code == 201
+    too_long = await api_post(owner, "/api/v1/admin/questions/import?dry_run=true", {"rows": [{**row, "source_reference": "x" * 1001}]})
+    assert too_long.status_code == 422

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Upload, AlertTriangle, ArrowRight, ArrowLeft, Download, Check, X } from 'lucide-react';
-import { adminApi, errorText, ImportReport, QuestionBody } from '../../api/client';
+import { adminApi, ApiError, errorText, ImportReport, QuestionBody } from '../../api/client';
 import { useAdminData } from '../../api/useAdminData';
 import { ActionResultNotice, type ActionResult } from '../ui/ConnectionNotice';
 import { parseQuestionCsv, QUESTION_CSV_HEADER, type ImportedQuestionRow } from '../../utils/questionCsv';
@@ -9,6 +9,27 @@ import { parseQuestionJson, QUESTION_JSON_EXAMPLE, shuffleOptions } from '../../
 /** The server takes at most this many questions per request; all selected files are sent together. */
 const MAX_ROWS = 500;
 const PASTED = 'вставленный текст';
+
+/** The limits of the server, so a too long value is reported with its line instead of failing the whole request. */
+const LIMITS = { text: 4000, option: 1000, explanation: 4000, source: 1000, id: 80 };
+
+function limitProblem(row: ImportedQuestionRow): string | null {
+  if (row.textRu.length > LIMITS.text || row.textKz.length > LIMITS.text) return `текст вопроса длиннее ${LIMITS.text} символов`;
+  if (row.options.some((o) => o.textRu.length > LIMITS.option || o.textKz.length > LIMITS.option)) return `вариант ответа длиннее ${LIMITS.option} символов`;
+  if (row.explanationRu.length > LIMITS.explanation || row.explanationKz.length > LIMITS.explanation) return `пояснение длиннее ${LIMITS.explanation} символов`;
+  if (row.source.length > LIMITS.source) return `источник длиннее ${LIMITS.source} символов (сейчас ${row.source.length})`;
+  if ((row.externalId ?? '').length > LIMITS.id) return `ID длиннее ${LIMITS.id} символов`;
+  return null;
+}
+
+/** A refused request names the field that failed, not only "check the data". */
+function describeError(error: unknown): string {
+  if (error instanceof ApiError && error.details.length > 0) {
+    const first = error.details.slice(0, 3).map((d) => `${d.field}: ${d.message}`).join('; ');
+    return `${error.message}. ${first}${error.details.length > 3 ? ` и ещё ${error.details.length - 3}` : ''}`;
+  }
+  return errorText(error);
+}
 
 interface ImportWizardProps {
   onDone: () => void;
@@ -120,6 +141,10 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
         blockedReason: next.blockedReason ?? null,
       });
     }
+    for (const row of rows) {
+      const problem = limitProblem(row);
+      if (problem) checks.find((c) => c.name === row.file)?.issues.push({ line: row.line, message: problem });
+    }
     // The same ID in two different files is as wrong as twice in one file.
     const seen = new Map<string, string>();
     for (const row of rows) {
@@ -172,7 +197,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
     try {
       setReport(await adminApi.checkQuestionImport(next.rows.map(toBody)));
     } catch (error) {
-      setResult({ tone: 'error', text: errorText(error) });
+      setResult({ tone: 'error', text: describeError(error) });
     } finally {
       setChecking(false);
     }
@@ -201,7 +226,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ onDone, onCancel }) 
       await adminApi.importQuestions(parsed.rows.map(toBody));
       setStep(4);
     } catch (error) {
-      setResult({ tone: 'error', text: errorText(error) });
+      setResult({ tone: 'error', text: describeError(error) });
     } finally {
       setImporting(false);
     }

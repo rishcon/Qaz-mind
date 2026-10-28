@@ -66,7 +66,7 @@ class QuestionIn(BaseModel):
     correct_label: Literal["A", "B", "C", "D", "E"]
     explanation_ru: str = Field(default="", max_length=4000)
     explanation_kz: str = Field(default="", max_length=4000)
-    source_reference: str = Field(default="", max_length=300)
+    source_reference: str = Field(default="", max_length=1000)
     external_id: str | None = Field(default=None, max_length=80)
 
     @field_validator("options")
