@@ -444,7 +444,7 @@ class SchoolAccessService:
             .order_by(SchoolClass.name, User.name)
         )
         return [
-            {"user_id": str(u.id), "name": u.name, "email": u.email, "class_id": str(c.id), "class_name": c.name}
+            {"user_id": str(u.id), "name": u.name, "email": u.email, "username": u.username, "class_id": str(c.id), "class_name": c.name}
             for u, c in rows.all()
         ]
 
@@ -456,7 +456,7 @@ class SchoolAccessService:
             .where(ClassMember.class_id == class_id, ClassMember.role == "student", ClassMember.status == "active")
             .order_by(User.name)
         )
-        return [ClassStudentOut(user_id=u.id, name=u.name, email=u.email, joined_at=m.joined_at) for m, u in rows.all()]
+        return [ClassStudentOut(user_id=u.id, name=u.name, email=u.email, username=u.username, joined_at=m.joined_at) for m, u in rows.all()]
 
     async def my_classes(self, user_id: uuid.UUID) -> list[MyClassOut]:
         rows = await self.db.execute(

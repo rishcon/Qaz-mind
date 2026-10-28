@@ -236,7 +236,7 @@ class SchoolService:
         for user_id, class_id in links.all():
             assigned.setdefault(user_id, []).append(class_id)
         return [
-            TeacherOut(user_id=u.id, name=u.name, email=u.email, status=m.status, class_ids=assigned.get(u.id, []))
+            TeacherOut(user_id=u.id, name=u.name, email=u.email, username=u.username, status=m.status, class_ids=assigned.get(u.id, []))
             for m, u in rows
         ]
 

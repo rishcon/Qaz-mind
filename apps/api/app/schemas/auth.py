@@ -26,7 +26,8 @@ class EmailRequest(BaseModel):
 class LoginRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    email: EmailStr
+    # An e-mail address, or the login of an account created by a school.
+    email: Annotated[str, Field(min_length=2, max_length=254)]
     password: Annotated[str, Field(min_length=1, max_length=128)]
 
 
@@ -43,12 +44,22 @@ class PasswordResetRequest(BaseModel):
     password: Password
 
 
+class ChangePasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    current_password: Annotated[str, Field(min_length=1, max_length=128)]
+    new_password: Password
+
+
 class UserOut(BaseModel):
     id: UUID
     name: str
     email: str
     email_verified: bool
     created_at: datetime
+    username: str | None = None
+    account_type: str = "student"
+    must_change_password: bool = False
 
 
 class MeResponse(BaseModel):

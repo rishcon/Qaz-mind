@@ -8,6 +8,11 @@ export interface ApiUser {
   email: string;
   email_verified: boolean;
   created_at: string;
+  /** Set for accounts created by a school: they sign in with it instead of an e-mail address. */
+  username?: string | null;
+  /** student: self-registered. school: a school representative or teacher. managed: a student created by a school. */
+  account_type?: 'student' | 'school' | 'managed';
+  must_change_password?: boolean;
 }
 
 export interface MeResponse {
@@ -54,9 +59,24 @@ export type ProfilePatch = Partial<OnboardingPayload>;
 
 // ----- auth ------------------------------------------------------------------------------------
 
+export interface ApiSchoolRegistration {
+  name: string;
+  email: string;
+  password: string;
+  school_name: string;
+  type: 'school' | 'lyceum' | 'gymnasium' | 'college' | 'tutoring_center' | 'other';
+  city: string;
+  contact_position: string;
+  contact_phone: string;
+  approx_students: number;
+}
+
 export const authApi = {
   register: (name: string, email: string, password: string) =>
     apiRequest<StatusResponse>('POST', '/auth/register', { name, email, password }),
+  registerSchool: (body: ApiSchoolRegistration) => apiRequest<StatusResponse>('POST', '/auth/register-school', body),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    apiRequest<void>('POST', '/auth/password/change', { current_password: currentPassword, new_password: newPassword }),
   verifyEmail: (token: string) => apiRequest<MeResponse>('POST', '/auth/verify-email', { token }),
   resendVerification: (email: string) => apiRequest<StatusResponse>('POST', '/auth/resend-verification', { email }),
   login: (email: string, password: string) => apiRequest<MeResponse>('POST', '/auth/login', { email, password }),
@@ -298,6 +318,7 @@ export interface ApiTeacher {
   user_id: string;
   name: string;
   email: string;
+  username: string | null;
   status: string;
   class_ids: string[];
 }
@@ -319,9 +340,21 @@ export const schoolApi = {
       { class_ids: classIds },
     ),
 
+  createAccount: (
+    orgId: string,
+    body: { role: 'SCHOOL_ADMIN' | 'TEACHER' | 'STUDENT'; name: string; class_ids: string[]; username?: string; password?: string },
+  ) => apiRequest<ApiCreatedAccount>('POST', `/organizations/${encodeURIComponent(orgId)}/accounts`, body),
+  createStudents: (orgId: string, classId: string, names: string[]) =>
+    apiRequest<{ items: ApiCreatedAccount[] }>('POST', `/organizations/${encodeURIComponent(orgId)}/accounts/bulk`, { class_id: classId, names }),
+  resetPassword: (orgId: string, userId: string) =>
+    apiRequest<{ user_id: string; name: string; username: string; password: string }>(
+      'POST',
+      `/organizations/${encodeURIComponent(orgId)}/accounts/${encodeURIComponent(userId)}/reset-password`,
+      {},
+    ),
   overview: (orgId: string) => apiRequest<ApiSchoolOverview>('GET', `/organizations/${encodeURIComponent(orgId)}/overview`),
   orgStudents: (orgId: string) =>
-    apiRequest<{ user_id: string; name: string; email: string; class_id: string; class_name: string }[]>(
+    apiRequest<{ user_id: string; name: string; email: string; username: string | null; class_id: string; class_name: string }[]>(
       'GET',
       `/organizations/${encodeURIComponent(orgId)}/students`,
     ),
@@ -480,6 +513,15 @@ export const assignmentApi = {
     apiRequest<ApiAttempt>('POST', `/school-assignments/attempts/${encodeURIComponent(attemptId)}/finish`, {}),
 };
 
+/** The password is shown once, when the school creates or resets the account; the server keeps only its hash. */
+export interface ApiCreatedAccount {
+  user_id: string;
+  name: string;
+  username: string;
+  password: string;
+  role: 'SCHOOL_ADMIN' | 'TEACHER' | 'STUDENT';
+}
+
 export interface ApiSchoolOverview {
   classes: number;
   students: number;
@@ -524,6 +566,7 @@ export interface ApiClassStudent {
   user_id: string;
   name: string;
   email: string;
+  username: string | null;
   joined_at: string;
 }
 

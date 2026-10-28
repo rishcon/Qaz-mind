@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, Building2, ClipboardList, GraduationCap, LayoutDashboard, UserCog, Users } from 'lucide-react';
-import { ApiMembership, ApiSchoolClass, schoolApi } from '../../api/endpoints';
+import { ApiMembership, ApiSchoolApplication, ApiSchoolClass, schoolApi } from '../../api/endpoints';
 import { errorText } from '../../api/client';
 import { AssignmentsTab } from './AssignmentsTab';
 import { ClassesTab } from './ClassesTab';
@@ -10,8 +10,10 @@ import { StudentsTab } from './StudentsTab';
 
 interface SchoolCabinetProps {
   myUserId: string;
+  /** 'school' for a school representative or teacher, who has no student dashboard. */
+  accountType: 'student' | 'school' | 'managed';
   onExit: () => void;
-  onApply: () => void;
+  onLogout: () => void;
 }
 
 const ROLE_TEXT = { SCHOOL_ADMIN: 'Администратор школы', TEACHER: 'Учитель' } as const;
@@ -22,7 +24,7 @@ const TAB_KEY = 'qazmind_school_tab';
  * active membership and, inside one of them, what their role allows. An administrator manages the whole school;
  * a teacher sees only the classes assigned to them.
  */
-export const SchoolCabinet: React.FC<SchoolCabinetProps> = ({ myUserId, onExit, onApply }) => {
+export const SchoolCabinet: React.FC<SchoolCabinetProps> = ({ myUserId, accountType, onExit, onLogout }) => {
   const [memberships, setMemberships] = useState<ApiMembership[] | null>(null);
   const [orgId, setOrgId] = useState('');
   const [tab, setTab] = useState<SchoolTab>(() => {
@@ -35,8 +37,13 @@ export const SchoolCabinet: React.FC<SchoolCabinetProps> = ({ myUserId, onExit, 
   const [classes, setClasses] = useState<ApiSchoolClass[]>([]);
   const [version, setVersion] = useState(0);
   const [error, setError] = useState('');
+  const [applications, setApplications] = useState<ApiSchoolApplication[]>([]);
 
   useEffect(() => {
+    schoolApi
+      .myApplications()
+      .then(setApplications)
+      .catch(() => setApplications([]));
     schoolApi
       .myOrganizations()
       .then((items) => {
@@ -90,11 +97,24 @@ export const SchoolCabinet: React.FC<SchoolCabinetProps> = ({ myUserId, onExit, 
   return (
     <div className="min-h-screen bg-[#F5F3EE] text-[#171717] flex flex-col selection:bg-[#FF5A36] selection:text-white">
       <header className="sticky top-0 z-30 bg-[#F5F3EE]/95 backdrop-blur-md border-b border-[#E2DED5] px-4 md:px-8 py-3.5 flex items-center justify-between gap-3">
-        <button type="button" onClick={onExit} className="p-1.5 hover:bg-[#EAE7DF] rounded flex items-center gap-1.5 text-xs font-mono font-bold cursor-pointer">
-          <ArrowLeft className="w-4 h-4" />
-          <span>В кабинет ученика</span>
-        </button>
-        <span className="text-xs font-mono font-bold text-[#FF5A36] uppercase tracking-wider">Кабинет школы</span>
+        {accountType === 'school' ? (
+          <span className="text-xl font-extrabold tracking-tight font-mono">
+            qazmind<span className="text-[#FF5A36]">.</span>
+          </span>
+        ) : (
+          <button type="button" onClick={onExit} className="p-1.5 hover:bg-[#EAE7DF] rounded flex items-center gap-1.5 text-xs font-mono font-bold cursor-pointer">
+            <ArrowLeft className="w-4 h-4" />
+            <span>В кабинет ученика</span>
+          </button>
+        )}
+        <div className="flex items-center gap-4">
+          <span className="hidden sm:inline text-xs font-mono font-bold text-[#FF5A36] uppercase tracking-wider">Кабинет школы</span>
+          {accountType === 'school' && (
+            <button type="button" onClick={onLogout} className="text-xs font-mono font-bold underline underline-offset-4 cursor-pointer">
+              Выйти
+            </button>
+          )}
+        </div>
       </header>
 
       {memberships === null && <p className="p-8 text-sm text-[#74736F]">Загрузка…</p>}
@@ -102,18 +122,27 @@ export const SchoolCabinet: React.FC<SchoolCabinetProps> = ({ myUserId, onExit, 
       {memberships && memberships.length === 0 && (
         <main className="flex-1 flex justify-center px-4 py-10">
           <div className="w-full max-w-[640px] bg-white border border-[#E2DED5] p-8 rounded-sm space-y-4 h-fit">
-            <h1 className="text-2xl font-extrabold tracking-tight">У вас нет подключённой школы</h1>
-            <p className="text-sm text-[#74736F] leading-relaxed">
-              Кабинет школы открывается администратору после одобрения заявки или учителю по приглашению школы.
-            </p>
+            {applications[0]?.status === 'pending' ? (
+              <>
+                <h1 className="text-2xl font-extrabold tracking-tight">Заявка на рассмотрении</h1>
+                <p className="text-sm text-[#74736F] leading-relaxed">
+                  Школа «{applications[0].school_name}» зарегистрирована, заявку проверяет команда QazMind. Когда её одобрят, здесь откроется кабинет школы, и мы напишем на вашу почту.
+                  Пока ничего делать не нужно.
+                </p>
+              </>
+            ) : applications[0]?.status === 'rejected' ? (
+              <>
+                <h1 className="text-2xl font-extrabold tracking-tight">Заявка отклонена</h1>
+                <p className="text-sm text-[#74736F] leading-relaxed">Школа «{applications[0].school_name}». Причина: {applications[0].rejection_reason || 'не указана'}.</p>
+                <p className="text-xs text-[#74736F]">Для новой заявки зарегистрируйте школу с другим email или напишите в QazMind.</p>
+              </>
+            ) : (
+              <>
+                <h1 className="text-2xl font-extrabold tracking-tight">У вас нет подключённой школы</h1>
+                <p className="text-sm text-[#74736F] leading-relaxed">Кабинет школы открывается после одобрения заявки школы или после того, как администратор школы создаст вам логин.</p>
+              </>
+            )}
             {error && <p className="text-xs text-red-700">{error}</p>}
-            <button
-              type="button"
-              onClick={onApply}
-              className="px-4 py-2 bg-[#171717] hover:bg-[#FF5A36] text-white font-mono text-xs font-bold uppercase tracking-wider cursor-pointer rounded-sm"
-            >
-              Подать заявку школы
-            </button>
           </div>
         </main>
       )}

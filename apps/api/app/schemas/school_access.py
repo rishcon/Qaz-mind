@@ -84,6 +84,7 @@ class ClassStudentOut(BaseModel):
     user_id: uuid.UUID
     name: str
     email: str
+    username: str | None = None
     joined_at: datetime
 
 

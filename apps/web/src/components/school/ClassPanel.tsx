@@ -1,41 +1,31 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ApiClassJoinRequest, ApiClassStudent, ApiJoinCode, schoolApi } from '../../api/endpoints';
+import { ApiClassStudent, ApiCreatedAccount, schoolApi } from '../../api/endpoints';
 import { errorText } from '../../api/client';
+import { Credentials } from './Credentials';
 
 interface ClassPanelProps {
   orgId: string;
   classId: string;
-  /** False when the organization is suspended: the lists stay readable, nothing can be changed. */
+  /** False when the school is suspended: the list stays readable, nothing can be changed. */
   writable: boolean;
+  /** Only a school administrator creates accounts and resets passwords. */
+  isAdmin: boolean;
   onChanged: () => void;
 }
 
-const field = 'px-3 py-2 bg-white border border-[#E2DED5] rounded-sm text-sm focus:outline-none focus:border-[#171717]';
 const small = 'text-xs font-mono font-bold underline underline-offset-4 cursor-pointer disabled:opacity-40';
 
-/** Students, join requests, class codes and student invitations of one class. */
-export const ClassPanel: React.FC<ClassPanelProps> = ({ orgId, classId, writable, onChanged }) => {
+/** Students of one class: the list with logins, adding students (one by one or a whole list) and password reset. */
+export const ClassPanel: React.FC<ClassPanelProps> = ({ orgId, classId, writable, isAdmin, onChanged }) => {
   const [students, setStudents] = useState<ApiClassStudent[]>([]);
-  const [requests, setRequests] = useState<ApiClassJoinRequest[]>([]);
-  const [codes, setCodes] = useState<ApiJoinCode[]>([]);
-  const [fresh, setFresh] = useState<ApiJoinCode | null>(null);
-  const [email, setEmail] = useState('');
-  const [days, setDays] = useState('14');
-  const [uses, setUses] = useState('50');
+  const [names, setNames] = useState('');
+  const [created, setCreated] = useState<{ title: string; items: Pick<ApiCreatedAccount, 'name' | 'username' | 'password'>[] } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [note, setNote] = useState('');
 
   const load = useCallback(async () => {
     try {
-      const [s, r, c] = await Promise.all([
-        schoolApi.students(orgId, classId),
-        schoolApi.classRequests(orgId, classId),
-        schoolApi.joinCodes(orgId, classId),
-      ]);
-      setStudents(s);
-      setRequests(r);
-      setCodes(c);
+      setStudents(await schoolApi.students(orgId, classId));
     } catch (err) {
       setError(errorText(err));
     }
@@ -45,24 +35,53 @@ export const ClassPanel: React.FC<ClassPanelProps> = ({ orgId, classId, writable
     void load();
   }, [load]);
 
-  const run = async (action: () => Promise<unknown>, success = '') => {
+  const addStudents = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const list = names.split('\n').map((n) => n.trim()).filter(Boolean);
+    if (list.length === 0) return;
     setBusy(true);
     setError('');
-    setNote('');
     try {
-      await action();
-      if (success) setNote(success);
+      const result = await schoolApi.createStudents(orgId, classId, list);
+      setCreated({ title: `Созданы ученики: ${result.items.length}`, items: result.items });
+      setNames('');
       await load();
       onChanged();
     } catch (err) {
       setError(errorText(err));
-      await load();
     } finally {
       setBusy(false);
     }
   };
 
-  const pending = requests.filter((r) => r.status === 'pending');
+  const reset = async (s: ApiClassStudent) => {
+    if (!window.confirm(`Выдать ${s.name} новый пароль? Прежний перестанет работать, а ученик будет выведен из аккаунта.`)) return;
+    setBusy(true);
+    setError('');
+    try {
+      const r = await schoolApi.resetPassword(orgId, s.user_id);
+      setCreated({ title: `Новый пароль: ${r.name}`, items: [r] });
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (s: ApiClassStudent) => {
+    if (!window.confirm(`Убрать ${s.name} из класса? Место лицензии освободится, личный прогресс сохранится.`)) return;
+    setBusy(true);
+    setError('');
+    try {
+      await schoolApi.removeStudent(orgId, classId, s.user_id);
+      await load();
+      onChanged();
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="border-t border-[#EFECE4] bg-[#FAF9F6] p-4 space-y-5">
@@ -71,36 +90,32 @@ export const ClassPanel: React.FC<ClassPanelProps> = ({ orgId, classId, writable
           {error}
         </div>
       )}
-      {note && <div className="text-xs text-[#258568] font-medium">{note}</div>}
+      {created && <Credentials title={created.title} items={created.items} onClose={() => setCreated(null)} />}
 
-      <div>
-        <h3 className="font-mono text-[11px] font-bold uppercase tracking-widest text-[#74736F] mb-2">
-          Заявки на вступление ({pending.length})
-        </h3>
-        {pending.length === 0 ? (
-          <p className="text-xs text-[#74736F]">Новых заявок нет.</p>
-        ) : (
-          <ul className="space-y-1.5">
-            {pending.map((r) => (
-              <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                <span>
-                  {r.name} <span className="text-xs text-[#74736F]">{r.email}</span>
-                </span>
-                {writable && (
-                  <span className="flex gap-4">
-                    <button type="button" disabled={busy} className={`${small} text-[#258568]`} onClick={() => run(() => schoolApi.decideRequest(r.id, 'approve'), 'Ученик добавлен в класс.')}>
-                      Принять
-                    </button>
-                    <button type="button" disabled={busy} className={`${small} text-red-700`} onClick={() => run(() => schoolApi.decideRequest(r.id, 'reject'))}>
-                      Отклонить
-                    </button>
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      {writable && isAdmin && (
+        <form onSubmit={addStudents} className="space-y-2">
+          <h3 className="font-mono text-[11px] font-bold uppercase tracking-widest text-[#74736F]">Добавить учеников</h3>
+          <textarea
+            value={names}
+            onChange={(e) => setNames(e.target.value)}
+            rows={4}
+            placeholder={'Иванов Пётр\nСергеева Анна\nКим Алия'}
+            className="w-full px-3 py-2 bg-white border border-[#E2DED5] rounded-sm text-sm focus:outline-none focus:border-[#171717]"
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="submit"
+              disabled={busy || !names.trim()}
+              className="px-4 py-2 bg-[#171717] hover:bg-[#FF5A36] disabled:opacity-40 text-white font-mono text-xs font-bold uppercase tracking-wider cursor-pointer rounded-sm"
+            >
+              Создать логины
+            </button>
+            <span className="text-[11px] text-[#74736F]">
+              По одному имени в строке (до 60 за раз). Каждому ученику система создаст логин и временный пароль и займёт место лицензии.
+            </span>
+          </div>
+        </form>
+      )}
 
       <div>
         <h3 className="font-mono text-[11px] font-bold uppercase tracking-widest text-[#74736F] mb-2">Ученики ({students.length})</h3>
@@ -111,92 +126,25 @@ export const ClassPanel: React.FC<ClassPanelProps> = ({ orgId, classId, writable
             {students.map((s) => (
               <li key={s.user_id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
                 <span>
-                  {s.name} <span className="text-xs text-[#74736F]">{s.email}</span>
+                  {s.name} <span className="text-xs font-mono text-[#74736F]">{s.username ?? s.email}</span>
                 </span>
-                {writable && (
-                  <button type="button" disabled={busy} className={`${small} text-[#74736F] hover:text-red-700`} onClick={() => run(() => schoolApi.removeStudent(orgId, classId, s.user_id))}>
-                    Убрать из класса
-                  </button>
+                {writable && isAdmin && (
+                  <span className="flex gap-4">
+                    {s.username && (
+                      <button type="button" disabled={busy} className={`${small} text-[#74736F] hover:text-[#171717]`} onClick={() => reset(s)}>
+                        Новый пароль
+                      </button>
+                    )}
+                    <button type="button" disabled={busy} className={`${small} text-[#74736F] hover:text-red-700`} onClick={() => remove(s)}>
+                      Убрать из класса
+                    </button>
+                  </span>
                 )}
               </li>
             ))}
           </ul>
         )}
       </div>
-
-      {writable && (
-        <div className="grid gap-5 md:grid-cols-2">
-          <div className="space-y-2">
-            <h3 className="font-mono text-[11px] font-bold uppercase tracking-widest text-[#74736F]">Пригласить ученика по email</h3>
-            <form
-              className="flex gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void run(async () => {
-                  await schoolApi.invite(orgId, { email, role: 'STUDENT', class_id: classId });
-                  setEmail('');
-                }, `Приглашение отправлено на ${email.trim().toLowerCase()}.`);
-              }}
-            >
-              <input className={`${field} flex-1 min-w-0`} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ученик@mail.kz" required />
-              <button type="submit" disabled={busy} className="px-3 py-2 bg-[#171717] hover:bg-[#FF5A36] disabled:opacity-40 text-white font-mono text-xs font-bold cursor-pointer rounded-sm">
-                Отправить
-              </button>
-            </form>
-          </div>
-
-          <div className="space-y-2">
-            <h3 className="font-mono text-[11px] font-bold uppercase tracking-widest text-[#74736F]">Код класса</h3>
-            <form
-              className="flex flex-wrap items-end gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void run(async () => setFresh(await schoolApi.createJoinCode(orgId, classId, { valid_days: Number(days) || 14, max_uses: Number(uses) || 50 })));
-              }}
-            >
-              <label className="text-[11px] font-bold">
-                дней
-                <input className={`${field} w-16 block`} value={days} onChange={(e) => setDays(e.target.value)} inputMode="numeric" />
-              </label>
-              <label className="text-[11px] font-bold">
-                заявок
-                <input className={`${field} w-20 block`} value={uses} onChange={(e) => setUses(e.target.value)} inputMode="numeric" />
-              </label>
-              <button type="submit" disabled={busy} className="px-3 py-2 bg-[#171717] hover:bg-[#FF5A36] disabled:opacity-40 text-white font-mono text-xs font-bold cursor-pointer rounded-sm">
-                Создать код
-              </button>
-            </form>
-            {fresh?.code && (
-              <div className="p-3 border border-[#BFE3D4] bg-[#F4FAF7] rounded-sm text-sm">
-                Новый код: <b className="font-mono text-base tracking-wider">{fresh.code}</b>
-                <div className="text-xs text-[#74736F] mt-1">Сохраните его сейчас: позже будет виден только конец кода.</div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {codes.length > 0 && (
-        <ul className="text-xs text-[#74736F] space-y-1">
-          {codes.map((c) => (
-            <li key={c.id} className="flex flex-wrap items-center gap-3">
-              <span className="font-mono">••••-••{c.code_hint}</span>
-              <span>
-                до {new Date(c.expires_at).toLocaleDateString('ru-RU')} · заявок {c.uses_count}/{c.max_uses}
-              </span>
-              {c.revoked ? (
-                <span>отозван</span>
-              ) : (
-                writable && (
-                  <button type="button" disabled={busy} className={`${small} text-red-700`} onClick={() => run(() => schoolApi.revokeJoinCode(orgId, classId, c.id))}>
-                    Отозвать
-                  </button>
-                )
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 };

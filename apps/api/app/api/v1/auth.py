@@ -4,6 +4,7 @@ from app.api.cookies import clear_session_cookie, set_csrf_cookie, set_session_c
 from app.api.deps import AuthDep, CurrentDep, ProfileDep, SettingsDep
 from app.core.security import generate_token
 from app.schemas.auth import (
+    ChangePasswordRequest,
     CsrfResponse,
     EmailRequest,
     LoginRequest,
@@ -14,6 +15,8 @@ from app.schemas.auth import (
     UserOut,
     VerifyEmailRequest,
 )
+from app.models import OrganizationApplication
+from app.schemas.school import SchoolRegisterRequest
 from app.services.auth import SessionContext
 from app.services.profile import ProfileService
 
@@ -27,6 +30,9 @@ def _user_out(ctx_user) -> UserOut:
         email=ctx_user.email,
         email_verified=ctx_user.email_verified_at is not None,
         created_at=ctx_user.created_at,
+        username=ctx_user.username,
+        account_type=ctx_user.account_type,
+        must_change_password=ctx_user.must_change_password,
     )
 
 
@@ -48,6 +54,18 @@ async def csrf(request: Request, response: Response, settings: SettingsDep) -> C
 async def register(body: RegisterRequest, auth: AuthDep) -> StatusResponse:
     await auth.register(body.name, body.email, body.password)
     # Same answer for new and existing addresses, so the endpoint cannot be used to enumerate accounts.
+    return StatusResponse(status="check_email")
+
+
+@router.post("/register-school", status_code=202, response_model=StatusResponse)
+async def register_school(body: SchoolRegisterRequest, auth: AuthDep) -> StatusResponse:
+    """A school representative signs up as a school, not as a student. The application waits for platform review."""
+    data = body.model_dump(exclude={"name", "email", "password"})
+
+    def add_application(user) -> None:
+        auth.db.add(OrganizationApplication(applicant_user_id=user.id, **data))
+
+    await auth.register(body.name, body.email, body.password, account_type="school", on_created=add_application)
     return StatusResponse(status="check_email")
 
 
@@ -98,6 +116,11 @@ async def logout(request: Request, auth: AuthDep, settings: SettingsDep) -> Resp
 @router.get("/me", response_model=MeResponse)
 async def me(ctx: CurrentDep, profiles: ProfileDep) -> MeResponse:
     return await _me(ctx, profiles)
+
+
+@router.post("/password/change", status_code=204)
+async def password_change(body: ChangePasswordRequest, ctx: CurrentDep, auth: AuthDep) -> None:
+    await auth.change_password(ctx.user, body.current_password, body.new_password, ctx.session.id)
 
 
 @router.post("/password/forgot", status_code=202, response_model=StatusResponse)

@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import timedelta
 from typing import NamedTuple
 
@@ -18,7 +19,7 @@ from app.core.time import utcnow
 from app.models import AuthSession, AuthToken, User
 from app.services.mail import MailDeliveryError, Mailer, OutgoingEmail
 
-INVALID_CREDENTIALS = "Неверный email или пароль"
+INVALID_CREDENTIALS = "Неверный логин или пароль"
 INVALID_TOKEN = "Ссылка недействительна или срок её действия истёк"
 
 
@@ -35,7 +36,14 @@ class AuthService:
 
     # ----- registration and email verification -------------------------------------------------
 
-    async def register(self, name: str, email: str, password: str) -> None:
+    async def register(
+        self,
+        name: str,
+        email: str,
+        password: str,
+        account_type: str = "student",
+        on_created: Callable[[User], None] | None = None,
+    ) -> None:
         email = normalize_email(email)
         # Hash before the lookup so that existing and new emails take the same time to answer.
         password_hash = hash_password(password)
@@ -59,9 +67,11 @@ class AuthService:
             )
             return
 
-        user = User(email=email, name=name, password_hash=password_hash)
+        user = User(email=email, name=name, password_hash=password_hash, account_type=account_type)
         self.db.add(user)
         await self.db.flush()
+        if on_created is not None:
+            on_created(user)
         raw = await self._issue_token(user, "verify_email", timedelta(hours=self.settings.email_verification_ttl_hours))
         await self._send_verification(email, raw)
 
@@ -87,9 +97,10 @@ class AuthService:
 
     # ----- login, logout, sessions -----------------------------------------------------------------
 
-    async def login(self, email: str, password: str, current_raw_session: str | None) -> tuple[AuthSession, User, str]:
-        email = normalize_email(email)
-        user = await self._user_by_email(email)
+    async def login(self, identifier: str, password: str, current_raw_session: str | None) -> tuple[AuthSession, User, str]:
+        """`identifier` is an e-mail address or, for accounts created by a school, a login."""
+        identifier = identifier.strip().lower()
+        user = await self._user_by_email(identifier) if "@" in identifier else await self._user_by_username(identifier)
         if user is None:
             burn_password_time(password)
             raise AppError(401, "INVALID_CREDENTIALS", INVALID_CREDENTIALS)
@@ -150,7 +161,8 @@ class AuthService:
     async def request_password_reset(self, email: str) -> None:
         email = normalize_email(email)
         user = await self._user_by_email(email)
-        if user is None or user.status != "active" or user.email_verified_at is None:
+        if user is None or user.status != "active" or user.email_verified_at is None or user.account_type == "managed":
+            # A school-created account has no mailbox: its password is reset by the school administrator.
             return
         if await self._recent_token_exists(user, "reset_password"):
             return
@@ -186,6 +198,25 @@ class AuthService:
         await self.db.commit()
 
     # ----- helpers ---------------------------------------------------------------------------------
+
+    async def _user_by_username(self, username: str) -> User | None:
+        result = await self.db.execute(select(User).where(User.username == username))
+        return result.scalar_one_or_none()
+
+    async def change_password(self, user: User, current: str, new: str, keep_session_id) -> None:
+        if not verify_password(user.password_hash, current):
+            raise AppError(400, "WRONG_PASSWORD", "Текущий пароль указан неверно")
+        if current == new:
+            raise AppError(422, "SAME_PASSWORD", "Новый пароль должен отличаться от текущего")
+        user.password_hash = hash_password(new)
+        user.must_change_password = False
+        # Other devices are signed out; the one that changed the password stays.
+        await self.db.execute(
+            update(AuthSession)
+            .where(AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None), AuthSession.id != keep_session_id)
+            .values(revoked_at=utcnow())
+        )
+        await self.db.commit()
 
     async def _user_by_email(self, email: str) -> User | None:
         result = await self.db.execute(select(User).where(User.email == email))

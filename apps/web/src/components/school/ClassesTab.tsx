@@ -119,7 +119,7 @@ export const ClassesTab: React.FC<ClassesTabProps> = ({ orgId, classes, isAdmin,
                   )}
                 </div>
               </div>
-              {open === c.id && <ClassPanel orgId={orgId} classId={c.id} writable={writable} onChanged={onChanged} />}
+              {open === c.id && <ClassPanel orgId={orgId} classId={c.id} writable={writable} isAdmin={isAdmin} onChanged={onChanged} />}
             </div>
           ))}
         </div>

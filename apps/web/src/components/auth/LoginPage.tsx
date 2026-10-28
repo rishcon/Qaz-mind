@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, ArrowRight } from 'lucide-react';
-import { validateLogin } from '../../utils/authValidation';
 import { Language } from '../../types';
 import { errorText } from '../../api/client';
 
@@ -30,11 +29,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const validation = validateLogin({ email, password });
-
-    if (!validation.isValid) {
-      setErrorField(validation.errorField || null);
-      setErrorMessage(currentLang === 'kz' ? (validation.messageKz || '') : (validation.messageRu || ''));
+    // The field takes an e-mail address or the login that a school created for the person.
+    if (email.trim().length < 2) {
+      setErrorField('email');
+      setErrorMessage(currentLang === 'kz' ? 'Email немесе логинді енгізіңіз' : 'Введите email или логин');
+      return;
+    }
+    if (!password) {
+      setErrorField('password');
+      setErrorMessage(currentLang === 'kz' ? 'Құпия сөзді енгізіңіз' : 'Введите пароль');
       return;
     }
 
@@ -106,18 +109,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 htmlFor="login-email"
                 className="block text-xs font-bold uppercase tracking-wider text-[#171717] mb-1.5"
               >
-                Email
+                Email или логин
               </label>
               <input
                 id="login-email"
-                type="email"
-                autoComplete="email"
+                type="text"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
                   if (errorField === 'email') setErrorMessage('');
                 }}
-                placeholder="student@example.com"
+                placeholder="email или логин от школы"
                 className={`w-full px-3.5 py-2.5 text-sm bg-[#FAF8F5] border ${
                   errorField === 'email' ? 'border-red-500 ring-1 ring-red-500' : 'border-[#E2DED5]'
                 } focus:outline-none focus:border-[#FF5A36] focus:bg-white transition-colors`}

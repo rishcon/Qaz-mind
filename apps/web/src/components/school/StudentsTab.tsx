@@ -7,7 +7,7 @@ interface StudentsTabProps {
   version: number;
 }
 
-type Row = { user_id: string; name: string; email: string; class_id: string; class_name: string };
+type Row = { user_id: string; name: string; email: string; username: string | null; class_id: string; class_name: string };
 
 /** All students of the school with their classes. Joining and leaving is managed inside each class. */
 export const StudentsTab: React.FC<StudentsTabProps> = ({ orgId, version }) => {
@@ -53,14 +53,14 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({ orgId, version }) => {
         </select>
       </div>
       {rows.length === 0 ? (
-        <p className="text-sm text-[#74736F]">Учеников пока нет. Дайте им код класса или пригласите по email во вкладке «Классы».</p>
+        <p className="text-sm text-[#74736F]">Учеников пока нет. Создайте им логины во вкладке «Классы»: «Управлять» → «Добавить учеников».</p>
       ) : (
         <div className="bg-white border border-[#E2DED5] rounded-sm overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="text-[11px] font-mono uppercase text-[#74736F] border-b border-[#EFECE4]">
               <tr>
                 <th className="p-3">Ученик</th>
-                <th className="p-3">Email</th>
+                <th className="p-3">Логин</th>
                 <th className="p-3">Класс</th>
               </tr>
             </thead>
@@ -68,7 +68,7 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({ orgId, version }) => {
               {shown.map((r) => (
                 <tr key={`${r.class_id}:${r.user_id}`} className="border-t border-[#EFECE4]">
                   <td className="p-3 font-medium">{r.name}</td>
-                  <td className="p-3 text-[#74736F]">{r.email}</td>
+                  <td className="p-3 font-mono text-xs text-[#74736F]">{r.username ?? r.email}</td>
                   <td className="p-3">{r.class_name}</td>
                 </tr>
               ))}

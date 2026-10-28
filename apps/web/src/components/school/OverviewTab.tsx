@@ -39,25 +39,15 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ orgId, isAdmin, onGo, 
   const a = data.assignments;
   const steps = [
     { done: data.classes > 0, title: 'Создайте классы', hint: 'Вкладка «Классы»: 11 А, 11 Б и так далее.', tab: 'classes' as const },
-    { done: !!lic, title: 'Лицензия платформы', hint: 'Её выдаёт QazMind. Пока её нет, ученики не смогут вступать в классы.', tab: null },
-    { done: data.teachers > 0, title: 'Пригласите учителей', hint: 'Вкладка «Сотрудники»: приглашение по email, затем назначьте классы.', tab: 'staff' as const },
-    { done: data.students > 0, title: 'Дайте ученикам код класса', hint: 'В классе нажмите «Управлять» и «Создать код»: ученик вводит его в настройках.', tab: 'classes' as const },
+    { done: !!lic, title: 'Лицензия платформы', hint: 'Её выдаёт QazMind. Пока её нет, создать учеников нельзя.', tab: null },
+    { done: data.teachers > 0, title: 'Пригласите учителей', hint: 'Вкладка «Сотрудники»: создайте логин и пароль учителя и отметьте его классы.', tab: 'staff' as const },
+    { done: data.students > 0, title: 'Создайте логины для учеников', hint: 'В классе нажмите «Управлять», впишите список имён и получите логины с паролями.', tab: 'classes' as const },
     { done: a.published + a.closed > 0, title: 'Назначьте первое задание', hint: 'Вкладка «Задания»: выберите предмет, классы и срок.', tab: 'assignments' as const },
   ];
   const showSteps = isAdmin && steps.some((s) => !s.done);
 
   return (
     <div className="space-y-6">
-      {data.pending_join_requests > 0 && (
-        <button
-          type="button"
-          onClick={() => onGo('classes')}
-          className="w-full text-left p-4 border border-[#FFD9CF] bg-[#FFF7F5] rounded-sm text-sm cursor-pointer"
-        >
-          <b>Заявки на вступление: {data.pending_join_requests}.</b> Откройте класс и нажмите «Управлять», чтобы принять или отклонить.
-        </button>
-      )}
-
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <button type="button" className={`${stat} cursor-pointer`} onClick={() => onGo('classes')}>
           <div className="text-2xl font-extrabold">{data.classes}</div>
@@ -94,7 +84,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ orgId, isAdmin, onGo, 
             </>
           ) : (
             <p className="text-sm text-[#74736F]">
-              Действующей лицензии нет. Пока её не выдала платформа, ученики не могут вступать в классы; всё остальное работает.
+              Действующей лицензии нет. Пока её не выдала платформа, создать логины учеников нельзя; всё остальное работает.
             </p>
           )}
         </div>

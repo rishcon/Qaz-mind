@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 OrgType = Literal["school", "lyceum", "gymnasium", "college", "tutoring_center", "other"]
 YEAR_RE = re.compile(r"^(20\d\d)-(20\d\d)$")
@@ -106,6 +106,7 @@ class TeacherOut(BaseModel):
     user_id: uuid.UUID
     name: str
     email: str
+    username: str | None = None
     status: str
     class_ids: list[uuid.UUID]
 
@@ -116,3 +117,26 @@ class TeacherClassesIn(BaseModel):
 
 class RejectIn(BaseModel):
     reason: str = Field(min_length=5, max_length=1000)
+
+
+class SchoolRegisterRequest(ApplicationIn):
+    """Registration of a school: the representative's account and the school's application in one step."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=2, max_length=80)
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+    # The contact person is the representative who registers; it is filled from `name` when not given.
+    contact_name: str = Field(default="", max_length=120)
+
+    @model_validator(mode="after")
+    def _contact(self) -> "SchoolRegisterRequest":
+        if not self.contact_name.strip():
+            self.contact_name = self.name
+        return self
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: str) -> str:
+        return _clean(value)

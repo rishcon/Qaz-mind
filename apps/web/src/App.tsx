@@ -6,7 +6,8 @@ import { useAuth } from './auth/AuthProvider';
 import { authApi, learningApi, MeResponse, OnboardingPayload, mistakesApi, practiceApi, schoolApi, profileApi, ProfilePatch } from './api/endpoints';
 import { emptyStudentProfile, toProfilePatch, toStudentProfile } from './api/mappers';
 import { UnavailablePage } from './components/common/UnavailablePage';
-import { SchoolApplyPage } from './components/school/SchoolApplyPage';
+import { SchoolRegisterPage } from './components/school/SchoolRegisterPage';
+import { ChangePasswordPage } from './components/auth/ChangePasswordPage';
 import { SchoolCabinet } from './components/school/SchoolCabinet';
 import { AcceptInvitePage } from './components/school/AcceptInvitePage';
 import { AssignmentsView } from './components/dashboard/AssignmentsView';
@@ -48,7 +49,6 @@ import { FocusPractice } from './components/focus/FocusPractice';
 
 /** Screens that are not connected to the server yet. They say so and show no data. */
 const INVITE_TOKEN_KEY = 'qazmind_invite_token';
-const RETURN_TO_KEY = 'qazmind_return_to';
 
 type UnavailableScreen = 'schools' | 'teacher' | 'exam' | 'not_found';
 
@@ -96,6 +96,7 @@ type AppRoute =
   | 'landing'
   | 'schools'
   | 'schools_apply'
+  | 'change_password'
   | 'invite'
   | 'school'
   | 'teacher'
@@ -144,7 +145,8 @@ export default function App() {
     const path = window.location.pathname;
 
     if (path === '/schools') return 'schools_apply';
-    if (path === '/schools/apply') return 'schools_apply';
+    if (path === '/schools/apply' || path === '/schools/register') return 'schools_apply';
+    if (path === '/change-password') return 'change_password';
     if (path === '/invite') return 'invite';
     if (path.startsWith('/school')) return 'school';
     if (path.startsWith('/teacher')) return 'teacher';
@@ -218,7 +220,7 @@ export default function App() {
     setCurrentRoute(route);
     const targetUrl =
       pathUrl ||
-      (route === 'landing' ? '/home' : route === 'schools_apply' ? '/schools/apply' : `/${route}`);
+      (route === 'landing' ? '/home' : route === 'schools_apply' ? '/schools/register' : route === 'change_password' ? '/change-password' : `/${route}`);
 
     if (window.location.pathname !== targetUrl) {
       window.history.pushState({}, '', targetUrl);
@@ -339,38 +341,31 @@ export default function App() {
     if (stored) navigateTo('invite', `/invite?token=${encodeURIComponent(stored)}`);
   }, [auth.status, auth.user?.id, currentRoute]);
 
-  // A signed-in student has no use for the public pages: the landing and the login/register forms lead to the dashboard.
+  // Where a signed-in person belongs: school accounts work in the school workspace, accounts with a temporary password
+  // choose their own first, everyone else goes to the study dashboard (after onboarding).
+  const homeFor = (user: { account_type?: string; must_change_password?: boolean }, onboarded: boolean): { route: AppRoute; url: string } => {
+    if (user.must_change_password) return { route: 'change_password', url: '/change-password' };
+    if (user.account_type === 'school') return { route: 'school', url: '/school' };
+    return onboarded ? { route: 'app', url: '/app' } : { route: 'onboarding', url: '/onboarding' };
+  };
+
   useEffect(() => {
     if (auth.status === 'loading' || !auth.user) return;
-    if (currentRoute === 'landing' || currentRoute === 'login' || currentRoute === 'register') {
-      // A person who came from the school application form goes back to it after signing in.
-      let back = '';
-      try {
-        back = sessionStorage.getItem(RETURN_TO_KEY) || '';
-        if (back) sessionStorage.removeItem(RETURN_TO_KEY);
-      } catch {
-        back = '';
-      }
-      if (back === '/schools/apply') {
-        navigateTo('schools_apply', back);
-        return;
-      }
-      navigateTo(onboardingCompleted ? 'app' : 'onboarding', onboardingCompleted ? '/app' : '/onboarding');
+    const home = homeFor(auth.user, onboardingCompleted);
+    if (auth.user.must_change_password && currentRoute !== 'change_password') {
+      navigateTo(home.route, home.url);
+      return;
     }
+    // A signed-in person has no use for the public pages, and a school account has no student dashboard.
+    const publicRoute = currentRoute === 'landing' || currentRoute === 'login' || currentRoute === 'register' || currentRoute === 'schools_apply';
+    const studentRoute = sessionRoutes.includes(currentRoute);
+    if (publicRoute || (auth.user.account_type === 'school' && studentRoute)) navigateTo(home.route, home.url);
   }, [currentRoute, auth.status, auth.user, onboardingCompleted]);
 
   // Opens a session returned by the server. The URL is changed first: the app remounts for the new user
   // and reads its screen from the URL.
   const openSession = async (me: MeResponse) => {
-    // A person who came from the school application form goes back to it after signing in.
-    let back = '';
-    try {
-      back = sessionStorage.getItem(RETURN_TO_KEY) || '';
-      if (back) sessionStorage.removeItem(RETURN_TO_KEY);
-    } catch {
-      back = '';
-    }
-    window.history.pushState({}, '', back === '/schools/apply' ? back : me.onboarding_completed ? '/app' : '/onboarding');
+    window.history.pushState({}, '', homeFor(me.user, me.onboarding_completed).url);
     await auth.applySession(me);
   };
 
@@ -476,29 +471,39 @@ export default function App() {
 
   if (currentRoute === 'schools_apply') {
     return (
-      <SchoolApplyPage
-        signedIn={!!auth.user}
-        onLogin={() => {
+      <SchoolRegisterPage
+        onRegister={async (form) => {
+          await authApi.registerSchool(form);
           try {
-            sessionStorage.setItem(RETURN_TO_KEY, '/schools/apply');
+            sessionStorage.setItem('qazmind_pending_email', form.email);
           } catch {}
-          navigateTo('login', '/login');
+          navigateTo('verify-email', '/verify-email');
         }}
-        onRegister={() => {
-          try {
-            sessionStorage.setItem(RETURN_TO_KEY, '/schools/apply');
-          } catch {}
-          navigateTo('register', '/register');
+        onLogin={() => navigateTo('login', '/login')}
+        onStudentRegister={() => navigateTo('register', '/register')}
+        onBack={() => navigateTo('landing', '/home')}
+      />
+    );
+  }
+
+  if (currentRoute === 'change_password') {
+    if (!auth.user) return null;
+    return (
+      <ChangePasswordPage
+        name={auth.user.name}
+        login={auth.user.username ?? auth.user.email}
+        onChange={async (current, next) => {
+          await authApi.changePassword(current, next);
+          await openSession(await authApi.me());
         }}
-        onOpenCabinet={() => navigateTo('school', '/school')}
-        onBack={() => navigateTo(auth.user ? 'app' : 'landing', auth.user ? '/app' : '/home')}
+        onLogout={handleLogout}
       />
     );
   }
 
   if (currentRoute === 'school') {
     if (!auth.user) return null; // the guard above sends an anonymous visitor to the login page
-    return <SchoolCabinet myUserId={auth.user.id} onExit={() => navigateTo('app', '/app')} onApply={() => navigateTo('schools_apply', '/schools/apply')} />;
+    return <SchoolCabinet myUserId={auth.user.id} accountType={auth.user.account_type ?? 'student'} onExit={() => navigateTo('app', '/app')} onLogout={handleLogout} />;
   }
 
   const unavailableScreen = UNAVAILABLE_ROUTES[currentRoute];
@@ -523,7 +528,7 @@ export default function App() {
         onRegister={handleRegister}
         onNavigateLogin={() => navigateTo('login', '/login')}
         onNavigateHome={() => navigateTo('landing', '/home')}
-        onNavigateSchoolApply={() => navigateTo('schools_apply', '/schools/apply')}
+        onNavigateSchoolApply={() => navigateTo('schools_apply', '/schools/register')}
       />
     );
   }
@@ -531,7 +536,7 @@ export default function App() {
   if (currentRoute === 'login') {
     return (
       <LoginPage
-        onNavigateSchoolApply={() => navigateTo('schools_apply', '/schools/apply')}
+        onNavigateSchoolApply={() => navigateTo('schools_apply', '/schools/register')}
         currentLang={currentLang}
         onLogin={handleLogin}
         onNavigateRegister={() => navigateTo('register', '/register')}
@@ -789,7 +794,7 @@ export default function App() {
         onLanguageChange={setCurrentLang}
         onOpenLogin={() => navigateTo('login', '/login')}
         onOpenRegister={() => navigateTo('register', '/register')}
-        onOpenSchools={() => navigateTo('schools_apply', '/schools/apply')}
+        onOpenSchools={() => navigateTo('schools_apply', '/schools/register')}
       />
 
       <main>
